@@ -1,0 +1,54 @@
+name: ClubNage NFC - Android APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["main"]
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Récupérer le projet
+        uses: actions/checkout@v4
+
+      - name: Installer Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Installer Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Générer la plateforme Android
+        run: flutter create --platforms=android --org fr.montchanin.clubnage .
+
+      - name: Configurer le NFC Android
+        shell: bash
+        run: |
+          python3 tool/prepare_android.py
+
+      - name: Récupérer les dépendances
+        run: flutter pub get
+
+      - name: Vérifier le projet
+        run: flutter analyze
+
+      - name: Construire l'APK
+        run: flutter build apk --release
+
+      - name: Publier l'APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: ClubNage-NFC-Android
+          path: build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
+          retention-days: 30
