@@ -31,6 +31,9 @@ jobs:
       - name: Générer la plateforme Android
         run: flutter create --platforms=android --org fr.montchanin.clubnage .
 
+      - name: Supprimer les fichiers de démonstration Flutter
+        run: rm -f test/widget_test.dart
+        
       - name: Configurer le NFC Android
         shell: bash
         run: |
