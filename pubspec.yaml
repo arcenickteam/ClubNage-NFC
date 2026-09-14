@@ -1,7 +1,7 @@
 name: clubnage_nfc
 publish_to: 'none'
 description: ClubNage NFC - Montchanin Natation
-version: 0.3.0+3
+version: 0.4.0+4
 
 environment:
   sdk: '>=3.11.0 <4.0.0'
@@ -13,14 +13,13 @@ dependencies:
   nfc_manager: ^4.2.1
   mobile_scanner: ^7.4.0
   shared_preferences: ^2.5.3
-  
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/montchanin_natation_logo.png
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0
-  
-flutter:
-
-  uses-material-design: true
-  assets:
-    - assets/montchanin_natation_logo.png
