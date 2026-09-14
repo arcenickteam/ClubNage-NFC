@@ -308,8 +308,28 @@ class _ClubNageHomeState extends State<ClubNageHome> {
       _sectionTitle('Nageurs', '${members.length} membres • association des badges'),
       TextField(onChanged: (v) => setState(() => memberSearch = v), decoration: const InputDecoration(prefixIcon: Icon(Icons.search), hintText: 'Rechercher un nageur', border: OutlineInputBorder())),
       const SizedBox(height: 12),
-      ...filtered.map((m) => Card(margin: const EdgeInsets.only(bottom: 8), child: ListTile(leading: CircleAvatar(child: Text(m.firstName[0])), title: Text(m.fullName), subtitle: Text(m.groups.map((id) => groups.firstWhere((g) => g.id == id).name).join(' • ')), trailing: Icon(assignedUids.containsKey(m.id) ? Icons.nfc : Icons.link_off, color: assignedUids.containsKey(m.id) ? green : Colors.white38), onTap: () => _showMember(m))))
-    ];
+          ...filtered.map(
+        (m) => Card(
+          margin: const EdgeInsets.only(bottom: 8),
+          child: ListTile(
+            leading: CircleAvatar(
+              child: Text(m.firstName[0]),
+            ),
+            title: Text(m.fullName),
+            subtitle: Text(
+              m.groups
+                  .map((id) => groups.firstWhere((g) => g.id == id).name)
+                  .join(' • '),
+            ),
+            trailing: Icon(
+              assignedUids.containsKey(m.id) ? Icons.nfc : Icons.link_off,
+              color: assignedUids.containsKey(m.id) ? green : Colors.white38,
+            ),
+            onTap: () => _showMember(m),
+          ),
+        ),
+      ),
+    ]);
   }
 
   Widget _statsPage() {
