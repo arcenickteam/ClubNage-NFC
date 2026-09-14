@@ -176,7 +176,7 @@ class _ClubNageHomeState extends State<ClubNageHome> {
       padding: const EdgeInsets.all(18),
       children: [
         DropdownButtonFormField<String>(
-          value: groupId,
+          initialValue: groupId,
           decoration: const InputDecoration(labelText: 'Séance / groupe', border: OutlineInputBorder()),
           items: groups.map((g) => DropdownMenuItem(value: g.id, child: Text(g.name))).toList(),
           onChanged: (v) { if (v != null) setState(() { groupId = v; result = null; }); },
