@@ -282,7 +282,7 @@ class _ClubNageHomeState extends State<ClubNageHome> {
       FilledButton.icon(onPressed: scanning ? null : _startNfc, icon: const Icon(Icons.contactless), label: Text(scanning ? 'Approchez le badge…' : 'LIRE UN BADGE NFC'), style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(64), textStyle: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold))),
       const SizedBox(height: 10),
       OutlinedButton.icon(onPressed: scanning ? null : _openQrScanner, icon: const Icon(Icons.qr_code_scanner), label: const Text('QR CODE DE SECOURS')),
-    ];
+    ]);
   }
 
   Widget _sectionTitle(String title, String subtitle) => Padding(padding: const EdgeInsets.only(bottom: 12), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(title, style: const TextStyle(fontSize: 25, fontWeight: FontWeight.w800)), const SizedBox(height: 3), Text(subtitle, style: const TextStyle(color: Colors.white60))]));
