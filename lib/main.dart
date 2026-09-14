@@ -277,9 +277,8 @@ void _showMember(Member m) {
               await _saveAssignment(m, uid);
             }
 
-            if (context.mounted) {
-              Navigator.pop(context);
-            }
+            if (!mounted) return;
+            Navigator.pop(context);
           },
           child: const Text('Enregistrer'),
         ),
