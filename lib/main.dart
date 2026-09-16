@@ -164,7 +164,7 @@ class _ClubNageHomeState extends State<ClubNageHome> {
     final status = now.isAfter(start.add(const Duration(minutes: 10))) ? AttendanceStatus.late : AttendanceStatus.present;
     setState(() {
       records.add(AttendanceRecord(memberId: member!.id, groupId: groupId, timestamp: now, status: status, method: method));
-      result = AttendanceResult(status: status, title: status == AttendanceStatus.late ? 'Retard enregistré' : 'Présent', message: member!.fullName, member: member, uid: identifier);
+      result = AttendanceResult(status: status, title: status == AttendanceStatus.late ? 'Retard enregistré' : 'Présent', message: member.fullName, member: member, uid: identifier);
     });
   }
 
@@ -444,7 +444,7 @@ class _BadgeAssociationPageState extends State<BadgeAssociationPage> {
           const SizedBox(height: 18), Text('Associer à ${widget.member.fullName} ?', textAlign: TextAlign.center, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
         ],
         if (error != null) Text(error!, textAlign: TextAlign.center, style: const TextStyle(color: Colors.redAccent)),
-      ])),
+      ]))),
       const SizedBox(height: 14),
       if (uid != null) FilledButton.icon(onPressed: saving ? null : _save, icon: const Icon(Icons.link), label: Text(saving ? 'ENREGISTREMENT…' : 'ASSOCIER LE BADGE'), style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(58))),
       if (!waiting && uid == null) FilledButton.icon(onPressed: _start, icon: const Icon(Icons.refresh), label: const Text('RÉESSAYER'), style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(58))),
