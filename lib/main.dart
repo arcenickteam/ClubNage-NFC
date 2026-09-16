@@ -450,7 +450,7 @@ class _BadgeAssociationPageState extends State<BadgeAssociationPage> {
       if (!waiting && uid == null) FilledButton.icon(onPressed: _start, icon: const Icon(Icons.refresh), label: const Text('RÉESSAYER'), style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(58))),
       const SizedBox(height: 8),
       OutlinedButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('ANNULER')),
-    ])),
+    ]))),
   );
 }
 
