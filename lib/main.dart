@@ -163,7 +163,7 @@ class _ClubNageHomeState extends State<ClubNageHome> {
     final start = DateTime(now.year, now.month, now.day, int.parse(parts[0]), int.parse(parts[1]));
     final status = now.isAfter(start.add(const Duration(minutes: 10))) ? AttendanceStatus.late : AttendanceStatus.present;
     setState(() {
-      records.add(AttendanceRecord(memberId: member!.id, groupId: groupId, timestamp: now, status: status, method: method));
+      records.add(AttendanceRecord(memberId: member.id, groupId: groupId, timestamp: now, status: status, method: method));
       result = AttendanceResult(status: status, title: status == AttendanceStatus.late ? 'Retard enregistré' : 'Présent', message: member!.fullName, member: member, uid: identifier);
     });
   }
@@ -241,7 +241,7 @@ class _ClubNageHomeState extends State<ClubNageHome> {
       Text(scanning ? 'EN ATTENTE DU BADGE NFC' : 'Scanner de présence', style: const TextStyle(fontSize: 21, fontWeight: FontWeight.w800), textAlign: TextAlign.center),
       const SizedBox(height: 7),
       Text(scanning ? 'Approchez le porte-clé du téléphone\n🔵 NFC actif' : 'Appuyez sur Scanner NFC ou utilisez le QR de secours.', textAlign: TextAlign.center, style: const TextStyle(color: Colors.white70)),
-    ]))),
+    ])),
     if (result != null) ...[const SizedBox(height: 12), _resultCard(result!)],
     const SizedBox(height: 14),
     FilledButton.icon(onPressed: scanning || !sessionOpen ? null : _startNfcPointage, icon: const Icon(Icons.contactless), label: Text(scanning ? 'NFC ACTIF…' : 'SCANNER NFC'), style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(58))),
@@ -450,7 +450,7 @@ class _BadgeAssociationPageState extends State<BadgeAssociationPage> {
       if (!waiting && uid == null) FilledButton.icon(onPressed: _start, icon: const Icon(Icons.refresh), label: const Text('RÉESSAYER'), style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(58))),
       const SizedBox(height: 8),
       OutlinedButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('ANNULER')),
-    ]))),
+    ])),
   );
 }
 
