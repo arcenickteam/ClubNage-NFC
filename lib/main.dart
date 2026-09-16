@@ -176,7 +176,7 @@ class _ClubNageHomeState extends State<ClubNageHome> {
       padding: const EdgeInsets.all(18),
       children: [
         DropdownButtonFormField<String>(
-          value: groupId,
+          initialValue: groupId,
           decoration: const InputDecoration(labelText: 'Séance / groupe', border: OutlineInputBorder()),
           items: groups.map((g) => DropdownMenuItem(value: g.id, child: Text(g.name))).toList(),
           onChanged: (v) { if (v != null) setState(() { groupId = v; result = null; }); },
@@ -288,12 +288,6 @@ class _ClubNageHomeState extends State<ClubNageHome> {
         ],
       ),
     );
-  }
-
-  void
-_showMember(Member m) {
-    final controller = TextEditingController(text: assignedUids[m.id] ?? '');
-    showDialog(context: context, builder: (_) => AlertDialog(title: Text(m.fullName), content: Column(mainAxisSize: MainAxisSize.min, children: [Text(m.groups.map((id) => groups.firstWhere((g) => g.id == id).name).join('\n')), textAlign: TextAlign.center), const SizedBox(height: 15), TextField(controller: controller, decoration: const InputDecoration(labelText: 'UID NFC', hintText: 'Ex. 04:AB:12:34:56:78:90', border: OutlineInputBorder()))]), actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Annuler')), FilledButton(onPressed: () async { final uid = controller.text.trim().toUpperCase(); if (uid.isNotEmpty) await _saveAssignment(m, uid); if (context.mounted) Navigator.pop(context); }, child: const Text('Enregistrer'))]));
   }
 
   void _showInfo(String title, String message) => showDialog(context: context, builder: (_) => AlertDialog(title: Text(title), content: Text(message), actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('OK'))]));
