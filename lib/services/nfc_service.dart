@@ -43,7 +43,7 @@ class NfcService {
         alertMessageIos: 'Approchez le porte-clé Montchanin Natation',
         invalidateAfterFirstReadIos: true,
         noPlatformSoundsAndroid: false,
-        onErrorIos: (error) {
+        onSessionErrorIos: (error) {
           _running = false;
           onError('Lecture NFC interrompue : ${error.message}');
         },

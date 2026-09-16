@@ -235,7 +235,63 @@ class _ClubNageHomeState extends State<ClubNageHome> {
 
   Widget _stat(String title, String value, IconData icon) => Card(child: ListTile(leading: Icon(icon, size: 34, color: const Color(0xFF18A8E0)), title: Text(title), trailing: Text(value, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold))));
 
-  void _showMember(Member m) {
+    void _showMember(Member m) {
+    final controller = TextEditingController(
+      text: assignedUids[m.id] ?? '',
+    );
+
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: Text(m.fullName),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              m.groups
+                  .map(
+                    (id) => groups.firstWhere((g) => g.id == id).name,
+                  )
+                  .join('\n'),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 15),
+            TextField(
+              controller: controller,
+              decoration: const InputDecoration(
+                labelText: 'UID NFC',
+                hintText: 'Ex. 04:AB:12:34:56:78:90',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Annuler'),
+          ),
+          FilledButton(
+            onPressed: () async {
+              final uid = controller.text.trim().toUpperCase();
+
+              if (uid.isNotEmpty) {
+                await _saveAssignment(m, uid);
+              }
+
+              if (context.mounted) {
+                Navigator.pop(context);
+              }
+            },
+            child: const Text('Enregistrer'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void
+_showMember(Member m) {
     final controller = TextEditingController(text: assignedUids[m.id] ?? '');
     showDialog(context: context, builder: (_) => AlertDialog(title: Text(m.fullName), content: Column(mainAxisSize: MainAxisSize.min, children: [Text(m.groups.map((id) => groups.firstWhere((g) => g.id == id).name).join('\n')), textAlign: TextAlign.center), const SizedBox(height: 15), TextField(controller: controller, decoration: const InputDecoration(labelText: 'UID NFC', hintText: 'Ex. 04:AB:12:34:56:78:90', border: OutlineInputBorder()))]), actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Annuler')), FilledButton(onPressed: () async { final uid = controller.text.trim().toUpperCase(); if (uid.isNotEmpty) await _saveAssignment(m, uid); if (context.mounted) Navigator.pop(context); }, child: const Text('Enregistrer'))]));
   }
