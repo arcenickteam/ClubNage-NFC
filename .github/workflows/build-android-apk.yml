@@ -1,14 +1,13 @@
-name: ClubNage NFC - Android APK
+name: Club MN NFC - Android APK
 
 on:
   workflow_dispatch:
   push:
-    branches: ["main"]
+    branches: [ "main" ]
 
 jobs:
   build-apk:
     runs-on: ubuntu-latest
-
     permissions:
       contents: read
 
@@ -20,7 +19,7 @@ jobs:
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: "17"
+          java-version: '17'
 
       - name: Installer Flutter
         uses: subosito/flutter-action@v2
@@ -31,27 +30,25 @@ jobs:
       - name: Générer la plateforme Android
         run: flutter create --platforms=android --org fr.montchanin.clubnage .
 
-      - name: Supprimer les fichiers de démonstration Flutter
-        run: rm -f test/widget_test.dart
-        
-      - name: Configurer le NFC Android
+      - name: Configurer le NFC Android et le logo
         shell: bash
         run: |
           python3 tool/prepare_android.py
+          cp -R tool/android_icons/. android/app/src/main/res/
 
-      - name: Récupérer les dépendances
-        run: flutter pub get
+      - name: Vérifier et récupérer les dépendances
+        run: |
+          flutter --version
+          flutter pub get
+          flutter analyze
 
-      - name: Vérifier le projet
-        run: flutter analyze
-
-      - name: Construire l'APK
+      - name: Construire l'APK de test
         run: flutter build apk --release
 
       - name: Publier l'APK
         uses: actions/upload-artifact@v4
         with:
-          name: ClubNage-NFC-Android
+          name: Club-MN-NFC-V5-Android
           path: build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
           retention-days: 30

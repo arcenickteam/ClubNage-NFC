@@ -7,7 +7,7 @@ Cette version est préparée pour générer automatiquement un APK Android avec 
 - un compte GitHub gratuit ;
 - créer un dépôt GitHub pour le projet ;
 - envoyer le contenu de ce dossier dans le dépôt ;
-- lancer l'action **ClubNage NFC - Android APK** depuis l'onglet **Actions**.
+- lancer l'action **Club MN NFC - Android APK** depuis l'onglet **Actions**.
 
 Aucun Flutter, Android Studio ou SDK Android n'est nécessaire sur le Mac ou le PC utilisé pour déposer le projet.
 
@@ -17,7 +17,7 @@ L'action génère :
 
 `build/app/outputs/flutter-apk/app-release.apk`
 
-L'APK est ensuite disponible dans **Actions > workflow > Artifacts > ClubNage-NFC-V3-Android**.
+L'APK est ensuite disponible dans **Actions > workflow > Artifacts > Club-MN-NFC-V5-Android**.
 
 ## Important
 

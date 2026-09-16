@@ -8,7 +8,7 @@ GitHub Actions installe Flutter et génère la plateforme Android avant de lance
 `flutter build apk --release`
 
 ### Artifact attendu
-`ClubNage-NFC-V3-Android` → `app-release.apk`
+`Club-MN-NFC-V5-Android` → `app-release.apk`
 
 ### Appareil cible de test
 Samsung Galaxy A33 5G.

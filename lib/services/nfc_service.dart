@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:typed_data';
 import 'package:nfc_manager/nfc_manager.dart';
 import 'package:nfc_manager/nfc_manager_android.dart';
@@ -20,7 +21,11 @@ class NfcService {
   Future<void> stop() async {
     if (!_running) return;
     try {
-      await NfcManager.instance.stopSession();
+      if (Platform.isAndroid) {
+        await NfcManagerAndroid.instance.disableReaderMode();
+      } else {
+        await NfcManager.instance.stopSession();
+      }
     } catch (_) {}
     _running = false;
   }
@@ -38,9 +43,41 @@ class NfcService {
 
     _running = true;
     try {
+      if (Platform.isAndroid) {
+        // Reader Mode prend la main sur le traitement NFC système d'Android.
+        // skipNdefCheck est volontaire : nos NTAG213 peuvent être vierges et
+        // Club MN NFC utilise leur UID matériel, pas leur contenu NDEF.
+        await NfcManagerAndroid.instance.enableReaderMode(
+          flags: {
+            NfcReaderFlagAndroid.nfcA,
+            NfcReaderFlagAndroid.nfcB,
+            NfcReaderFlagAndroid.skipNdefCheck,
+            NfcReaderFlagAndroid.noPlatformSounds,
+          },
+          onTagDiscovered: (tag) async {
+            try {
+              final androidTag = NfcTagAndroid.from(tag);
+              if (androidTag == null) {
+                onError('Tag NFC Android non reconnu.');
+                await stop();
+                return;
+              }
+              final uid = _hex(androidTag.id);
+              await stop();
+              onRead(NfcReadResult(uid, 'Android'));
+            } catch (e) {
+              await stop();
+              onError('Impossible de lire ce badge : $e');
+            }
+          },
+        );
+        return;
+      }
+
+      // iOS : session NFC native via nfc_manager.
       await NfcManager.instance.startSession(
         pollingOptions: {NfcPollingOption.iso14443},
-        alertMessageIos: 'Approchez le porte-clé Montchanin Natation',
+        alertMessageIos: 'Approchez le porte-clé Club MN NFC',
         invalidateAfterFirstReadIos: true,
         noPlatformSoundsAndroid: false,
         onSessionErrorIos: (error) {
@@ -49,27 +86,15 @@ class NfcService {
         },
         onDiscovered: (tag) async {
           try {
-            String? uid;
-            String platform;
-
             final iosTag = MiFareIos.from(tag);
-            if (iosTag != null) {
-              uid = _hex(iosTag.identifier);
-              platform = 'iOS';
-            } else {
-              final androidTag = NfcTagAndroid.from(tag);
-              if (androidTag != null) {
-                uid = _hex(androidTag.id);
-                platform = 'Android';
-              } else {
-                onError('Type de badge NFC non reconnu.');
-                await stop();
-                return;
-              }
+            if (iosTag == null) {
+              onError('Tag NFC iOS non reconnu.');
+              await stop();
+              return;
             }
-
+            final uid = _hex(iosTag.identifier);
             await stop();
-            onRead(NfcReadResult(uid, platform));
+            onRead(NfcReadResult(uid, 'iOS'));
           } catch (e) {
             await stop();
             onError('Impossible de lire ce badge : $e');

@@ -5,6 +5,9 @@ class Member {
   final List<String> groups;
   final String nfcUid;
   final String qrToken;
+  final String dossierStatus;
+  final String email;
+  final String phone;
 
   const Member({
     required this.id,
@@ -13,6 +16,9 @@ class Member {
     required this.groups,
     required this.nfcUid,
     required this.qrToken,
+    this.dossierStatus = 'Validé',
+    this.email = '',
+    this.phone = '',
   });
 
   String get fullName => '$firstName $lastName';
@@ -21,12 +27,15 @@ class Member {
 class TrainingGroup {
   final String id;
   final String name;
-  final String schedule;
+  final String day;
+  final String startTime;
+  final String endTime;
 
-  const TrainingGroup(this.id, this.name, this.schedule);
+  const TrainingGroup(this.id, this.name, this.day, this.startTime, this.endTime);
+  String get schedule => '$day • $startTime–$endTime';
 }
 
-enum AttendanceStatus { present, duplicate, denied, unknown }
+enum AttendanceStatus { present, late, duplicate, denied, unknown }
 
 class AttendanceResult {
   final AttendanceStatus status;
@@ -35,14 +44,17 @@ class AttendanceResult {
   final Member? member;
   final String? uid;
 
-  const AttendanceResult({
-    required this.status,
-    required this.title,
-    required this.message,
-    this.member,
-    this.uid,
-  });
-
-  bool get ok => status == AttendanceStatus.present;
+  const AttendanceResult({required this.status, required this.title, required this.message, this.member, this.uid});
+  bool get ok => status == AttendanceStatus.present || status == AttendanceStatus.late;
   bool get duplicate => status == AttendanceStatus.duplicate;
+}
+
+class AttendanceRecord {
+  final String memberId;
+  final String groupId;
+  final DateTime timestamp;
+  final AttendanceStatus status;
+  final String method;
+
+  const AttendanceRecord({required this.memberId, required this.groupId, required this.timestamp, required this.status, required this.method});
 }
