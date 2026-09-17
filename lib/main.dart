@@ -401,27 +401,72 @@ class _BadgeAssociationPageState extends State<BadgeAssociationPage> {
   }
 
   Future<void> _start() async {
-    setState(() { uid = null; error = null; waiting = true; });
+    setState(() {
+      uid = null;
+      error = null;
+      waiting = true;
+    });
+
     await widget.nfc.scan(
-      onRead: (read) { if (mounted) setState(() { uid = read.uid; waiting = false; }); },
-      onError: (message) { if (mounted) setState(() { error = message; waiting = false; }); },
+      onRead: (read) {
+        if (!mounted) return;
+
+        setState(() {
+          uid = read.uid;
+          waiting = false;
+        });
+
+        // V6 Android :
+        // ne pas arrêter Reader Mode ici.
+        // Le badge peut encore être physiquement contre le téléphone.
+      },
+      onError: (message) {
+        if (!mounted) return;
+
+        setState(() {
+          error = message;
+          waiting = false;
+        });
+      },
     );
   }
 
   Future<void> _save() async {
     if (uid == null || saving) return;
+
     setState(() => saving = true);
+
     final message = await widget.onSave(uid!);
+
     if (!mounted) return;
+
     if (message != null) {
-      setState(() { error = message; saving = false; uid = null; });
+      setState(() {
+        error = message;
+        saving = false;
+      });
       return;
     }
+
+    // V6 :
+    // Reader Mode reste actif pendant l'enregistrement.
+    //
+    // L'utilisateur doit retirer le badge avant que l'écran soit fermé.
+    // On laisse un court délai afin d'éviter de rendre instantanément
+    // le NTAG213 au gestionnaire NFC Samsung.
+    await Future<void>.delayed(const Duration(milliseconds: 1200));
+
+    await widget.nfc.stop();
+
+    if (!mounted) return;
+
     Navigator.of(context).pop(true);
   }
 
   @override
   void dispose() {
+    // Sécurité uniquement si l'utilisateur quitte l'écran sans enregistrer.
+    // L'arrêt est asynchrone : on ne bloque pas dispose().
     widget.nfc.stop();
     super.dispose();
   }
@@ -441,7 +486,25 @@ class _BadgeAssociationPageState extends State<BadgeAssociationPage> {
         if (uid != null) ...[
           const Text('UID', style: TextStyle(color: Colors.white60)),
           const SizedBox(height: 4), SelectableText(uid!, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
-          const SizedBox(height: 18), Text('Associer à ${widget.member.fullName} ?', textAlign: TextAlign.center, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+          const SizedBox(height: 18),
+          const Text(
+            'RETIREZ MAINTENANT LE BADGE DU TÉLÉPHONE',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w900,
+              color: Colors.orangeAccent,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'Puis associez ce badge à ${widget.member.fullName}.',
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
         ],
         if (error != null) Text(error!, textAlign: TextAlign.center, style: const TextStyle(color: Colors.redAccent)),
       ])))),
