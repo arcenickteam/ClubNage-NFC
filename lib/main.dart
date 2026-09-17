@@ -663,6 +663,12 @@ class _ClubNageHomeState extends State<ClubNageHome> {
 
         const SizedBox(height: 18),
 
+        // Résultat du dernier badge - visible immédiatement
+        if (result != null) ...[
+          _v6ScanResult(result!),
+          const SizedBox(height: 16),
+        ],
+
         // Zone principale NFC
         Container(
           padding: const EdgeInsets.fromLTRB(20, 26, 20, 24),
@@ -829,11 +835,6 @@ class _ClubNageHomeState extends State<ClubNageHome> {
           ),
         ),
 
-        // Résultat du dernier badge
-        if (result != null) ...[
-          const SizedBox(height: 16),
-          _v6ScanResult(result!),
-        ],
 
         const SizedBox(height: 18),
 
