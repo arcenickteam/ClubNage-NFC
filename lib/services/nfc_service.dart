@@ -16,6 +16,9 @@ class NfcService {
   bool _running = false;
   bool _processingTag = false;
   String? _lastUid;
+  DateTime? _lastReadAt;
+
+  static const Duration _sameBadgeCooldown = Duration(seconds: 3);
 
   bool get isRunning => _running;
 
@@ -44,6 +47,7 @@ class NfcService {
       _running = false;
       _processingTag = false;
       _lastUid = null;
+      _lastReadAt = null;
     }
   }
 
@@ -63,6 +67,7 @@ class NfcService {
     _running = true;
     _processingTag = false;
     _lastUid = null;
+    _lastReadAt = null;
 
     try {
       if (Platform.isAndroid) {
@@ -108,19 +113,29 @@ class NfcService {
 
           final uid = _hex(androidTag.id);
 
-          // Protection contre plusieurs callbacks du même badge pendant
-          // qu'il reste physiquement contre le téléphone.
-          if (_lastUid == uid) return;
+          // Protection anti-double lecture :
+          // le même badge est ignoré pendant quelques secondes,
+          // mais un autre badge peut être lu immédiatement.
+          final now = DateTime.now();
+          if (_lastUid == uid &&
+              _lastReadAt != null &&
+              now.difference(_lastReadAt!) < _sameBadgeCooldown) {
+            return;
+          }
 
           _processingTag = true;
           _lastUid = uid;
+          _lastReadAt = now;
 
-          // IMPORTANT V6 :
-          // ne PAS appeler stop() ici.
-          //
-          // Reader Mode reste actif pendant que le badge est encore dans
-          // le champ NFC. L'écran appelant décidera quand libérer la session.
-          onRead(NfcReadResult(uid, 'Android'));
+          // Reader Mode reste actif : on peut enchaîner les badges
+          // sans fermer l'écran et sans rendre le NTAG213 à Android.
+          try {
+            onRead(NfcReadResult(uid, 'Android'));
+          } finally {
+            // Très important : réarme immédiatement le lecteur
+            // pour accepter le badge suivant.
+            _processingTag = false;
+          }
         } catch (e) {
           _processingTag = false;
           onError('Impossible de lire ce badge : $e');

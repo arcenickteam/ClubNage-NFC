@@ -113,25 +113,59 @@ class _ClubNageHomeState extends State<ClubNageHome> {
   int get presentCount => currentRecords.where((r) => r.status == AttendanceStatus.present || r.status == AttendanceStatus.late).map((r) => r.memberId).toSet().length;
   int get lateCount => currentRecords.where((r) => r.status == AttendanceStatus.late).length;
 
-  void _go(int index) {
+  Future<void> _go(int index) async {
+    // Le Scanner NFC est un mode actif.
+    // Lorsque l'on quitte cet écran, on libère proprement Reader Mode.
+    if (page == 1 && index != 1 && nfc.isRunning) {
+      await nfc.stop();
+      if (mounted) {
+        setState(() => scanning = false);
+      }
+    }
+
+    if (!mounted) return;
     setState(() => page = index);
-    Navigator.of(context).maybePop();
   }
 
   Future<void> _startNfcPointage() async {
-    if (scanning || !sessionOpen) return;
-    setState(() { scanning = true; result = null; });
+    if (!sessionOpen) return;
+
+    // Si le lecteur Android est déjà actif, on ne démarre pas
+    // une deuxième session NFC.
+    if (nfc.isRunning) {
+      if (mounted) {
+        setState(() {
+          scanning = true;
+          result = null;
+        });
+      }
+      return;
+    }
+
+    setState(() {
+      scanning = true;
+      result = null;
+    });
+
     await nfc.scan(
       onRead: (read) {
         if (!mounted) return;
-        setState(() => scanning = false);
+
+        // IMPORTANT V6 :
+        // scanning reste à true.
+        // Le Reader Mode Android continue donc d'attendre
+        // immédiatement le badge suivant.
         _processIdentifier(read.uid, 'NFC');
       },
       onError: (message) {
         if (!mounted) return;
         setState(() {
           scanning = false;
-          result = AttendanceResult(status: AttendanceStatus.unknown, title: 'Lecture NFC interrompue', message: message);
+          result = AttendanceResult(
+            status: AttendanceStatus.unknown,
+            title: 'Lecture NFC interrompue',
+            message: message,
+          );
         });
       },
     );
@@ -176,41 +210,384 @@ class _ClubNageHomeState extends State<ClubNageHome> {
   }
 
   Future<void> _associate(Member member) async {
-    final saved = await Navigator.of(context).push<bool>(MaterialPageRoute(
-      builder: (_) => BadgeAssociationPage(nfc: nfc, member: member, onSave: (uid) => _saveAssignment(member, uid)),
-    ));
-    if (saved == true && mounted) setState(() {});
+    // L'association d'un badge doit avoir sa propre session NFC.
+    // On arrête donc d'abord un éventuel pointage encore actif.
+    if (nfc.isRunning) {
+      await nfc.stop();
+    }
+
+    if (!mounted) return;
+
+    setState(() {
+      scanning = false;
+      result = null;
+    });
+
+    final saved = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => BadgeAssociationPage(
+          nfc: nfc,
+          member: member,
+          onSave: (uid) => _saveAssignment(member, uid),
+        ),
+      ),
+    );
+
+    if (saved == true && mounted) {
+      setState(() {});
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final pages = [_homePage(), _scannerPage(), _membersPage(), _groupsPage(), _sessionsPage(), _presencePage(), _statsPage()];
+    final pages = [
+      _homePage(),
+      _scannerPage(),
+      _membersPage(),
+      _groupsPage(),
+      _sessionsPage(),
+      _presencePage(),
+      _statsPage(),
+    ];
+
     return Scaffold(
+      extendBody: true,
       appBar: AppBar(
+        toolbarHeight: 68,
         backgroundColor: navy,
         surfaceTintColor: Colors.transparent,
-        title: Text(pageNames[page], style: const TextStyle(fontWeight: FontWeight.w800)),
+        automaticallyImplyLeading: false,
+        titleSpacing: 16,
+        title: Row(
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              padding: const EdgeInsets.all(4),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Image.asset('assets/montchanin_natation_logo.png'),
+            ),
+            const SizedBox(width: 11),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'MONTCHANIN NATATION',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: .3,
+                    ),
+                  ),
+                  Text(
+                    _v6PageTitle(),
+                    style: const TextStyle(
+                      color: Colors.white60,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
         actions: [
-          Padding(padding: const EdgeInsets.only(right: 12), child: Tooltip(message: 'Synchronisation kDrive', child: Icon(Icons.cloud_outlined, color: Colors.white.withValues(alpha: .75)))),
+          Padding(
+            padding: const EdgeInsets.only(right: 14),
+            child: Icon(
+              Icons.cloud_done_outlined,
+              color: Colors.white.withValues(alpha: .72),
+            ),
+          ),
         ],
       ),
-      drawer: NavigationDrawer(
-        selectedIndex: page,
-        onDestinationSelected: _go,
-        children: [
-          Padding(padding: const EdgeInsets.fromLTRB(18, 18, 18, 12), child: Row(children: [
-            Container(width: 58, height: 58, padding: const EdgeInsets.all(5), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14)), child: Image.asset('assets/montchanin_natation_logo.png')),
-            const SizedBox(width: 12),
-            const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('Club MN NFC', style: TextStyle(fontSize: 19, fontWeight: FontWeight.w800)), Text('Montchanin Natation', style: TextStyle(color: Colors.white60))])),
-          ])),
-          const Divider(),
-          for (var i = 0; i < pageNames.length; i++) NavigationDrawerDestination(icon: Icon(pageIcons[i]), label: Text(pageNames[i])),
-          const Divider(),
-          const ListTile(leading: Icon(Icons.cloud_sync_outlined), title: Text('kDrive'), subtitle: Text('Synchronisation sécurisée')),
+      body: SafeArea(
+        bottom: false,
+        child: Padding(
+          padding: const EdgeInsets.only(bottom: 92),
+          child: pages[page],
+        ),
+      ),
+      bottomNavigationBar: _v6BottomNavigation(),
+    );
+  }
+
+  String _v6PageTitle() {
+    switch (page) {
+      case 0:
+        return 'Tableau de bord';
+      case 1:
+        return 'Pointage NFC / QR';
+      case 2:
+        return 'Licenciés';
+      case 3:
+        return 'Groupes';
+      case 4:
+        return 'Séances';
+      case 5:
+        return 'Présences';
+      case 6:
+        return 'Statistiques';
+      default:
+        return 'Club MN NFC';
+    }
+  }
+
+  Widget _v6BottomNavigation() {
+    return Container(
+      decoration: BoxDecoration(
+        color: panel,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: .28),
+            blurRadius: 20,
+            offset: const Offset(0, -4),
+          ),
         ],
       ),
-      body: SafeArea(child: pages[page]),
-      floatingActionButton: page == 1 ? FloatingActionButton.extended(onPressed: scanning ? null : _startNfcPointage, icon: const Icon(Icons.nfc), label: Text(scanning ? 'NFC ACTIF' : 'SCANNER NFC')) : null,
+      child: SafeArea(
+        top: false,
+        child: SizedBox(
+          height: 78,
+          child: Row(
+            children: [
+              _v6NavItem(
+                icon: Icons.home_rounded,
+                label: 'Accueil',
+                targetPage: 0,
+              ),
+              _v6NavItem(
+                icon: Icons.badge_outlined,
+                label: 'Licenciés',
+                targetPage: 2,
+              ),
+
+              Expanded(
+                child: Transform.translate(
+                  offset: const Offset(0, -17),
+                  child: GestureDetector(
+                    onTap: () => _go(1),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 64,
+                          height: 64,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: blue,
+                            border: Border.all(
+                              color: navy,
+                              width: 5,
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: blue.withValues(alpha: .38),
+                                blurRadius: 16,
+                                spreadRadius: 2,
+                              ),
+                            ],
+                          ),
+                          child: const Icon(
+                            Icons.contactless_rounded,
+                            color: Colors.white,
+                            size: 31,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'Scanner',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w800,
+                            color: page == 1 ? cyan : Colors.white70,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+
+              _v6NavItem(
+                icon: Icons.fact_check_outlined,
+                label: 'Présences',
+                targetPage: 5,
+              ),
+              _v6NavItem(
+                icon: Icons.more_horiz_rounded,
+                label: 'Plus',
+                targetPage: -1,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _v6NavItem({
+    required IconData icon,
+    required String label,
+    required int targetPage,
+  }) {
+    final selected = targetPage >= 0 && page == targetPage;
+
+    return Expanded(
+      child: InkWell(
+        onTap: () {
+          if (targetPage == -1) {
+            _showMoreMenu();
+          } else {
+            _go(targetPage);
+          }
+        },
+        child: SizedBox(
+          height: 72,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                icon,
+                size: 25,
+                color: selected ? cyan : Colors.white54,
+              ),
+              const SizedBox(height: 4),
+              Text(
+                label,
+                maxLines: 1,
+                style: TextStyle(
+                  fontSize: 10.5,
+                  fontWeight:
+                      selected ? FontWeight.w800 : FontWeight.w600,
+                  color: selected ? Colors.white : Colors.white54,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showMoreMenu() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: panel,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 4, 14, 18),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Align(
+                alignment: Alignment.centerLeft,
+                child: Padding(
+                  padding: EdgeInsets.fromLTRB(8, 0, 8, 10),
+                  child: Text(
+                    'Administration',
+                    style: TextStyle(
+                      fontSize: 21,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ),
+              ),
+              _moreTile(
+                sheetContext,
+                Icons.groups_outlined,
+                'Groupes',
+                'Gestion des groupes de nage',
+                3,
+              ),
+              _moreTile(
+                sheetContext,
+                Icons.calendar_month_outlined,
+                'Séances',
+                'Planning et ouverture des séances',
+                4,
+              ),
+              _moreTile(
+                sheetContext,
+                Icons.bar_chart_rounded,
+                'Statistiques',
+                'Suivi des présences et retards',
+                6,
+              ),
+              ListTile(
+                leading: const CircleAvatar(
+                  child: Icon(Icons.cloud_sync_outlined),
+                ),
+                title: const Text(
+                  'Synchronisation',
+                  style: TextStyle(fontWeight: FontWeight.w700),
+                ),
+                subtitle: const Text('kDrive • mode hors ligne'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                        'Connexion kDrive à configurer avec les accès Infomaniak.',
+                      ),
+                    ),
+                  );
+                },
+              ),
+              ListTile(
+                leading: const CircleAvatar(
+                  child: Icon(Icons.settings_outlined),
+                ),
+                title: const Text(
+                  'Paramètres',
+                  style: TextStyle(fontWeight: FontWeight.w700),
+                ),
+                subtitle: const Text('Configuration de Club MN NFC'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                        'Les paramètres avancés seront ajoutés dans la V6.',
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _moreTile(
+    BuildContext sheetContext,
+    IconData icon,
+    String title,
+    String subtitle,
+    int targetPage,
+  ) {
+    return ListTile(
+      leading: CircleAvatar(child: Icon(icon)),
+      title: Text(
+        title,
+        style: const TextStyle(fontWeight: FontWeight.w700),
+      ),
+      subtitle: Text(subtitle),
+      trailing: const Icon(Icons.chevron_right),
+      onTap: () {
+        Navigator.pop(sheetContext);
+        _go(targetPage);
+      },
     );
   }
 
@@ -232,22 +609,444 @@ class _ClubNageHomeState extends State<ClubNageHome> {
     ]);
   }
 
-  Widget _scannerPage() => ListView(padding: const EdgeInsets.all(16), children: [
-    _groupSelector(),
-    const SizedBox(height: 14),
-    Card(child: Padding(padding: const EdgeInsets.all(20), child: Column(children: [
-      Icon(scanning ? Icons.contactless : Icons.nfc, size: 72, color: scanning ? cyan : blue),
-      const SizedBox(height: 10),
-      Text(scanning ? 'EN ATTENTE DU BADGE NFC' : 'Scanner de présence', style: const TextStyle(fontSize: 21, fontWeight: FontWeight.w800), textAlign: TextAlign.center),
-      const SizedBox(height: 7),
-      Text(scanning ? 'Approchez le porte-clé du téléphone\n🔵 NFC actif' : 'Appuyez sur Scanner NFC ou utilisez le QR de secours.', textAlign: TextAlign.center, style: const TextStyle(color: Colors.white70)),
-    ]))),
-    if (result != null) ...[const SizedBox(height: 12), _resultCard(result!)],
-    const SizedBox(height: 14),
-    FilledButton.icon(onPressed: scanning || !sessionOpen ? null : _startNfcPointage, icon: const Icon(Icons.contactless), label: Text(scanning ? 'NFC ACTIF…' : 'SCANNER NFC'), style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(58))),
-    const SizedBox(height: 8),
-    OutlinedButton.icon(onPressed: scanning || !sessionOpen ? null : _openQrScanner, icon: const Icon(Icons.qr_code_scanner), label: const Text('SCANNER QR')),
-  ]);
+  Widget _scannerPage() {
+    final expected = expectedMembers.length;
+    final absent = (expected - presentCount).clamp(0, expected);
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 20),
+      children: [
+        // Sélection de la séance
+        Container(
+          padding: const EdgeInsets.all(4),
+          decoration: BoxDecoration(
+            color: panel,
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(
+              color: Colors.white.withValues(alpha: .07),
+            ),
+          ),
+          child: _groupSelector(),
+        ),
+
+        const SizedBox(height: 14),
+
+        // État de la séance
+        Row(
+          children: [
+            Expanded(
+              child: _scannerMiniMetric(
+                'Attendus',
+                '$expected',
+                Icons.groups_outlined,
+                cyan,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _scannerMiniMetric(
+                'Présents',
+                '$presentCount',
+                Icons.check_circle_outline,
+                green,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _scannerMiniMetric(
+                'Restants',
+                '$absent',
+                Icons.hourglass_bottom_rounded,
+                orange,
+              ),
+            ),
+          ],
+        ),
+
+        const SizedBox(height: 18),
+
+        // Zone principale NFC
+        Container(
+          padding: const EdgeInsets.fromLTRB(20, 26, 20, 24),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                panel,
+                scanning
+                    ? blue.withValues(alpha: .22)
+                    : const Color(0xFF102C43),
+              ],
+            ),
+            borderRadius: BorderRadius.circular(28),
+            border: Border.all(
+              color: scanning
+                  ? cyan.withValues(alpha: .45)
+                  : Colors.white.withValues(alpha: .08),
+            ),
+            boxShadow: scanning
+                ? [
+                    BoxShadow(
+                      color: blue.withValues(alpha: .17),
+                      blurRadius: 24,
+                      spreadRadius: 2,
+                    ),
+                  ]
+                : null,
+          ),
+          child: Column(
+            children: [
+              Container(
+                width: 116,
+                height: 116,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: scanning
+                      ? blue.withValues(alpha: .18)
+                      : Colors.white.withValues(alpha: .05),
+                  border: Border.all(
+                    color: scanning
+                        ? cyan
+                        : Colors.white.withValues(alpha: .15),
+                    width: 2,
+                  ),
+                ),
+                child: Icon(
+                  Icons.contactless_rounded,
+                  size: 64,
+                  color: scanning ? cyan : Colors.white70,
+                ),
+              ),
+
+              const SizedBox(height: 20),
+
+              Text(
+                scanning
+                    ? 'LECTURE NFC ACTIVE'
+                    : 'POINTAGE DES NAGEURS',
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: .4,
+                ),
+              ),
+
+              const SizedBox(height: 8),
+
+              Text(
+                scanning
+                    ? 'Approchez un porte-clé NFC du téléphone.\n'
+                      'Le lecteur reste actif pour le nageur suivant.'
+                    : sessionOpen
+                        ? 'Démarrez le lecteur NFC pour enregistrer les présences.'
+                        : 'La séance est actuellement fermée.',
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: Colors.white70,
+                  fontSize: 15,
+                  height: 1.4,
+                ),
+              ),
+
+              const SizedBox(height: 18),
+
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 250),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 8,
+                ),
+                decoration: BoxDecoration(
+                  color: scanning
+                      ? green.withValues(alpha: .14)
+                      : Colors.white.withValues(alpha: .05),
+                  borderRadius: BorderRadius.circular(30),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 9,
+                      height: 9,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: scanning ? green : Colors.white38,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      scanning
+                          ? 'NFC ACTIF • EN ATTENTE'
+                          : 'NFC EN VEILLE',
+                      style: TextStyle(
+                        color: scanning ? green : Colors.white60,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 22),
+
+              if (!scanning)
+                FilledButton.icon(
+                  onPressed:
+                      sessionOpen ? _startNfcPointage : null,
+                  icon: const Icon(Icons.contactless_rounded),
+                  label: const Text('DÉMARRER LE POINTAGE NFC'),
+                  style: FilledButton.styleFrom(
+                    minimumSize: const Size.fromHeight(58),
+                    textStyle: const TextStyle(
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                )
+              else
+                OutlinedButton.icon(
+                  onPressed: _stopNfcPointage,
+                  icon: const Icon(Icons.stop_circle_outlined),
+                  label: const Text('ARRÊTER LE POINTAGE NFC'),
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size.fromHeight(54),
+                    foregroundColor: Colors.white,
+                  ),
+                ),
+
+              const SizedBox(height: 9),
+
+              OutlinedButton.icon(
+                onPressed:
+                    sessionOpen && !scanning ? _openQrScanner : null,
+                icon: const Icon(Icons.qr_code_scanner_rounded),
+                label: const Text('UTILISER LE QR DE SECOURS'),
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size.fromHeight(52),
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        // Résultat du dernier badge
+        if (result != null) ...[
+          const SizedBox(height: 16),
+          _v6ScanResult(result!),
+        ],
+
+        const SizedBox(height: 18),
+
+        Row(
+          children: [
+            const Expanded(
+              child: Text(
+                'Présences enregistrées',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ),
+            Text(
+              '$presentCount / $expected',
+              style: const TextStyle(
+                color: cyan,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ],
+        ),
+
+        const SizedBox(height: 8),
+
+        if (currentRecords.isEmpty)
+          Container(
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              color: panel,
+              borderRadius: BorderRadius.circular(18),
+            ),
+            child: const Row(
+              children: [
+                Icon(Icons.info_outline, color: Colors.white54),
+                SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Aucun nageur pointé pour le moment.',
+                    style: TextStyle(color: Colors.white60),
+                  ),
+                ),
+              ],
+            ),
+          )
+        else
+          ...currentRecords.reversed.take(5).map((r) {
+            final m = _memberById(r.memberId);
+            final late = r.status == AttendanceStatus.late;
+
+            return Card(
+              child: ListTile(
+                leading: CircleAvatar(
+                  backgroundColor: (late ? orange : green)
+                      .withValues(alpha: .15),
+                  child: Icon(
+                    late
+                        ? Icons.schedule_rounded
+                        : Icons.check_rounded,
+                    color: late ? orange : green,
+                  ),
+                ),
+                title: Text(
+                  m.fullName,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                subtitle: Text(
+                  '${late ? 'Retard' : 'Présent'}'
+                  ' • ${_time(r.timestamp)}'
+                  ' • ${r.method}',
+                ),
+                trailing: Icon(
+                  r.method == 'NFC'
+                      ? Icons.nfc_rounded
+                      : Icons.qr_code_rounded,
+                  color: Colors.white54,
+                ),
+              ),
+            );
+          }),
+      ],
+    );
+  }
+
+  Widget _scannerMiniMetric(
+    String title,
+    String value,
+    IconData icon,
+    Color color,
+  ) {
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: 8,
+        vertical: 12,
+      ),
+      decoration: BoxDecoration(
+        color: panel,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        children: [
+          Icon(icon, color: color, size: 22),
+          const SizedBox(height: 5),
+          Text(
+            value,
+            style: const TextStyle(
+              fontSize: 19,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          Text(
+            title,
+            maxLines: 1,
+            style: const TextStyle(
+              color: Colors.white54,
+              fontSize: 10,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _v6ScanResult(AttendanceResult r) {
+    lateOrDuplicate() =>
+        r.status == AttendanceStatus.late ||
+        r.status == AttendanceStatus.duplicate;
+
+    final Color color = r.status == AttendanceStatus.present
+        ? green
+        : lateOrDuplicate()
+            ? orange
+            : Colors.redAccent;
+
+    final IconData icon = r.status == AttendanceStatus.present
+        ? Icons.check_circle_rounded
+        : r.status == AttendanceStatus.late
+            ? Icons.schedule_rounded
+            : r.status == AttendanceStatus.duplicate
+                ? Icons.warning_amber_rounded
+                : Icons.cancel_rounded;
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 250),
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: .11),
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(
+          color: color.withValues(alpha: .45),
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: color, size: 48),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  r.title.toUpperCase(),
+                  style: TextStyle(
+                    color: color,
+                    fontSize: 17,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  r.message,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                if (r.member != null) ...[
+                  const SizedBox(height: 3),
+                  Text(
+                    currentGroup.name,
+                    style: const TextStyle(
+                      color: Colors.white60,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          if (scanning)
+            const Icon(
+              Icons.contactless_rounded,
+              color: cyan,
+            ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _stopNfcPointage() async {
+    await nfc.stop();
+
+    if (!mounted) return;
+
+    setState(() {
+      scanning = false;
+    });
+  }
 
   Widget _membersPage() {
     final filtered = members.where((m) => m.fullName.toLowerCase().contains(memberSearch.toLowerCase())).toList();
