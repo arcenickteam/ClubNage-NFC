@@ -64,8 +64,6 @@ class _ClubNageHomeState extends State<ClubNageHome> {
     Member(id: 'M1004', firstName: 'Léa', lastName: 'Robert', groups: ['mercredi', 'ecole'], nfcUid: '04:44:55:66:77:88:99', qrToken: 'CN:M1004'),
   ];
 
-  static const pageNames = ['Accueil', 'Scanner', 'Licenciés', 'Groupes', 'Séances', 'Présences', 'Statistiques'];
-  static const pageIcons = [Icons.home, Icons.nfc, Icons.people, Icons.groups, Icons.calendar_month, Icons.fact_check, Icons.bar_chart];
 
   @override
   void initState() {
@@ -1144,11 +1142,6 @@ class _ClubNageHomeState extends State<ClubNageHome> {
 
   Widget _metric(String title, String value, IconData icon, Color color) => Card(child: Padding(padding: const EdgeInsets.all(14), child: Row(children: [Icon(icon, color: color, size: 28), const SizedBox(width: 8), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(title, style: const TextStyle(color: Colors.white60)), Text(value, style: const TextStyle(fontSize: 21, fontWeight: FontWeight.w800))]))])));
 
-  Widget _resultCard(AttendanceResult r) {
-    final color = r.status == AttendanceStatus.present ? green : r.status == AttendanceStatus.late || r.status == AttendanceStatus.duplicate ? orange : Colors.redAccent;
-    final icon = r.status == AttendanceStatus.present ? Icons.check_circle : r.status == AttendanceStatus.late ? Icons.schedule : r.status == AttendanceStatus.duplicate ? Icons.warning_amber : Icons.cancel;
-    return Card(child: Padding(padding: const EdgeInsets.all(18), child: Column(children: [Icon(icon, color: color, size: 48), const SizedBox(height: 6), Text(r.title, style: TextStyle(color: color, fontSize: 20, fontWeight: FontWeight.w800)), const SizedBox(height: 4), Text(r.message, textAlign: TextAlign.center), if (r.uid != null) ...[const SizedBox(height: 8), Text('UID : ${r.uid}', style: const TextStyle(color: Colors.white60))]])));
-  }
 
   Widget _syncCard() => const Card(child: ListTile(
     leading: Icon(Icons.cloud_sync_outlined, color: cyan),
