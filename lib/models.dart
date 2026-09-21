@@ -42,6 +42,12 @@ class TrainingSession {
   final DateTime openedAt;
   final DateTime? closedAt;
   final List<String> expectedMemberIds;
+  final String? label;
+  final DateTime? startTime;
+  final DateTime? endTime;
+  final List<String> eligibleGroupIds;
+  final String? manualType;
+  final bool excludeFromStats;
 
   const TrainingSession({
     required this.id,
@@ -50,6 +56,12 @@ class TrainingSession {
     required this.openedAt,
     this.closedAt,
     required this.expectedMemberIds,
+    this.label,
+    this.startTime,
+    this.endTime,
+    this.eligibleGroupIds = const [],
+    this.manualType,
+    this.excludeFromStats = false,
   });
 
   bool get isOpen => closedAt == null;
@@ -61,6 +73,12 @@ class TrainingSession {
         openedAt: openedAt,
         closedAt: time,
         expectedMemberIds: expectedMemberIds,
+        label: label,
+        startTime: startTime,
+        endTime: endTime,
+        eligibleGroupIds: eligibleGroupIds,
+        manualType: manualType,
+        excludeFromStats: excludeFromStats,
       );
 }
 

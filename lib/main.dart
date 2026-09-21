@@ -43,7 +43,7 @@ class ClubNageHome extends StatefulWidget {
 class _ClubNageHomeState extends State<ClubNageHome> {
   final NfcService nfc = NfcService();
   int page = 0;
-  String groupId = 'mercredi';
+  String groupId = 'juniors';
   bool sessionOpen = false;
   bool scanning = false;
   AttendanceResult? result;
@@ -64,19 +64,100 @@ class _ClubNageHomeState extends State<ClubNageHome> {
   DateTime? statsCustomEnd;
 
   final groups = const [
-    TrainingGroup('mercredi', 'Groupe du mercredi', 'Mercredi', '17:00', '18:00'),
-    TrainingGroup('jaune', 'Groupe jaune', 'Samedi', '10:00', '11:00'),
-    TrainingGroup('ecole', 'École de nage', 'Jeudi', '17:30', '18:30'),
+    TrainingGroup('juniors', 'Compétition Juniors', 'Planning hebdomadaire', '18:45', '20:30'),
+    TrainingGroup('benjamins', 'Compétition Benjamins', 'Planning hebdomadaire', '18:00', '19:30'),
+    TrainingGroup('avenirs', 'Compétition Avenirs', 'Planning hebdomadaire', '18:00', '19:00'),
+    TrainingGroup('jaune', 'Débutants – Jaune', 'Mercredi / Samedi', '11:00', '11:45'),
+    TrainingGroup('rouge', 'Confirmés – Rouge', 'Mardi / Samedi', '18:15', '19:15'),
+    TrainingGroup('violet', 'Confirmés – Violet', 'Mardi / Samedi', '18:15', '19:15'),
+    TrainingGroup('bleu', 'Confirmés – Bleu', 'Mardi / Samedi', '18:15', '19:15'),
+    TrainingGroup('vert', 'Confirmés – Vert', 'Mardi / Samedi', '18:15', '19:15'),
+    TrainingGroup('adultes', 'Adultes 18 ans et +', 'Planning hebdomadaire', '12:00', '13:00'),
+    TrainingGroup('aqua', 'Aquaforme / Aquafitness', 'Planning hebdomadaire', '10:00', '11:00'),
   ];
 
   final members = const [
-    Member(id: 'M1001', firstName: 'Lucas', lastName: 'Martin', groups: ['mercredi'], nfcUid: '04:11:22:33:44:55:66', qrToken: 'CN:M1001', email: 'lucas@example.fr'),
-    Member(id: 'M1002', firstName: 'Emma', lastName: 'Dupont', groups: ['mercredi', 'jaune'], nfcUid: '04:22:33:44:55:66:77', qrToken: 'CN:M1002', phone: '06 00 00 00 02'),
-    Member(id: 'M1003', firstName: 'Hugo', lastName: 'Bernard', groups: ['jaune'], nfcUid: '04:33:44:55:66:77:88', qrToken: 'CN:M1003', dossierStatus: 'À compléter'),
-    Member(id: 'M1004', firstName: 'Léa', lastName: 'Robert', groups: ['mercredi', 'ecole'], nfcUid: '04:44:55:66:77:88:99', qrToken: 'CN:M1004'),
+    Member(id: 'M1001', firstName: 'Lucas', lastName: 'Martin', groups: ['juniors'], nfcUid: '04:11:22:33:44:55:66', qrToken: 'CN:M1001', email: 'lucas@example.fr'),
+    Member(id: 'M1002', firstName: 'Emma', lastName: 'Dupont', groups: ['jaune', 'bleu'], nfcUid: '04:22:33:44:55:66:77', qrToken: 'CN:M1002', phone: '06 00 00 00 02'),
+    Member(id: 'M1003', firstName: 'Hugo', lastName: 'Bernard', groups: ['rouge'], nfcUid: '04:33:44:55:66:77:88', qrToken: 'CN:M1003', dossierStatus: 'À compléter'),
+    Member(id: 'M1004', firstName: 'Léa', lastName: 'Robert', groups: ['violet', 'vert'], nfcUid: '04:44:55:66:77:88:99', qrToken: 'CN:M1004'),
   ];
 
 
+
+  static const _weeklySlots = <Map<String, Object>>[
+    {'id':'jun-lun','label':'Compétition Juniors','groups':['juniors'],'weekday':1,'start':'18:45','end':'20:30'},
+    {'id':'jun-mar','label':'Compétition Juniors','groups':['juniors'],'weekday':2,'start':'19:15','end':'20:45'},
+    {'id':'jun-mer','label':'Compétition Juniors – préparation physique','groups':['juniors'],'weekday':3,'start':'15:00','end':'16:15'},
+    {'id':'jun-jeu','label':'Compétition Juniors','groups':['juniors'],'weekday':4,'start':'18:30','end':'20:15'},
+    {'id':'jun-ven','label':'Compétition Juniors','groups':['juniors'],'weekday':5,'start':'18:30','end':'20:00'},
+    {'id':'jun-sam','label':'Compétition Juniors','groups':['juniors'],'weekday':6,'start':'12:00','end':'13:15'},
+    {'id':'ben-lun','label':'Compétition Benjamins','groups':['benjamins'],'weekday':1,'start':'18:00','end':'19:30'},
+    {'id':'ben-jeu','label':'Compétition Benjamins','groups':['benjamins'],'weekday':4,'start':'18:15','end':'19:30'},
+    {'id':'ben-ven','label':'Compétition Benjamins','groups':['benjamins'],'weekday':5,'start':'18:30','end':'20:00'},
+    {'id':'av-lun','label':'Compétition Avenirs','groups':['avenirs'],'weekday':1,'start':'18:00','end':'19:00'},
+    {'id':'av-ven','label':'Compétition Avenirs','groups':['avenirs'],'weekday':5,'start':'17:30','end':'18:30'},
+    {'id':'conf-mar','label':'Confirmés – Rouge / Violet / Bleu / Vert','groups':['rouge','violet','bleu','vert'],'weekday':2,'start':'18:15','end':'19:15'},
+    {'id':'conf-sam','label':'Confirmés – Rouge / Violet / Bleu / Vert','groups':['rouge','violet','bleu','vert'],'weekday':6,'start':'11:00','end':'12:00'},
+    {'id':'jaune-mer','label':'Débutants – Jaune','groups':['jaune'],'weekday':3,'start':'11:00','end':'11:45'},
+    {'id':'jaune-sam1','label':'Débutants – Jaune (créneau 1)','groups':['jaune'],'weekday':6,'start':'09:30','end':'10:15'},
+    {'id':'jaune-sam2','label':'Débutants – Jaune (créneau 2)','groups':['jaune'],'weekday':6,'start':'10:15','end':'11:00'},
+    {'id':'adult-lun-midi','label':'Adultes 18 ans et +','groups':['adultes'],'weekday':1,'start':'12:00','end':'13:00'},
+    {'id':'adult-lun-soir','label':'Adultes 18 ans et +','groups':['adultes'],'weekday':1,'start':'19:30','end':'20:30'},
+    {'id':'adult-jeu-midi','label':'Adultes 18 ans et +','groups':['adultes'],'weekday':4,'start':'12:00','end':'13:00'},
+    {'id':'adult-jeu-soir','label':'Adultes 18 ans et +','groups':['adultes'],'weekday':4,'start':'19:30','end':'20:30'},
+    {'id':'aqua-mer-10','label':'Aquaforme','groups':['aqua'],'weekday':3,'start':'10:00','end':'11:00'},
+    {'id':'aqua-mer-1230','label':'Aquaforme','groups':['aqua'],'weekday':3,'start':'12:30','end':'13:30'},
+    {'id':'aqua-ven','label':'Aquaforme','groups':['aqua'],'weekday':5,'start':'20:00','end':'21:00'},
+    {'id':'aqua-sam','label':'Aquafitness','groups':['aqua'],'weekday':6,'start':'09:00','end':'09:30'},
+  ];
+
+  String _dayName(int w) => const ['', 'Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi','Dimanche'][w];
+  DateTime _at(DateTime d,String t){final p=t.split(':');return DateTime(d.year,d.month,d.day,int.parse(p[0]),int.parse(p[1]));}
+  List<Map<String,Object>> get _todaySlots => _weeklySlots.where((s)=>s['weekday']==DateTime.now().weekday).toList();
+  List<String> _slotGroups(Map<String,Object> s)=>List<String>.from(s['groups'] as List);
+  bool _slotCanOpen(Map<String,Object> s){final n=DateTime.now(),st=_at(n,s['start'] as String),en=_at(n,s['end'] as String);return !n.isBefore(st.subtract(const Duration(minutes:30)))&&n.isBefore(en.add(const Duration(hours:4)));}
+  List<Member> _membersForGroups(List<String> ids)=>members.where((m)=>m.groups.any(ids.contains)).toList();
+
+  void _openScheduledSession(Map<String,Object> slot){
+    if(sessionOpen){ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('Une séance est déjà ouverte.')));return;}
+    if(!_slotCanOpen(slot)){ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('Ouverture possible 30 minutes avant le début.')));return;}
+    final n=DateTime.now(),ids=_slotGroups(slot),exp=_membersForGroups(ids);
+    final s=TrainingSession(id:'${slot['id']}-${n.millisecondsSinceEpoch}',groupId:ids.first,date:DateTime(n.year,n.month,n.day),openedAt:n,expectedMemberIds:List.unmodifiable(exp.map((m)=>m.id)),label:slot['label'] as String,startTime:_at(n,slot['start'] as String),endTime:_at(n,slot['end'] as String),eligibleGroupIds:List.unmodifiable(ids));
+    setState((){sessions.add(s);activeSession=s;groupId=ids.first;sessionOpen=true;result=null;});
+  }
+
+  Future<void> _openManualSessionDialog() async{
+    if(sessionOpen){ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('Fermez d’abord la séance active.')));return;}
+    String type='Entraînement exceptionnel',selectedGroup=groupId;
+    final ok=await showDialog<bool>(context:context,builder:(dc)=>StatefulBuilder(builder:(context,setLocal)=>AlertDialog(
+      title:const Text('Ouvrir une séance manuelle'),
+      content:Column(mainAxisSize:MainAxisSize.min,children:[
+        DropdownButtonFormField<String>(initialValue:type,decoration:const InputDecoration(labelText:'Type'),items:const [
+          DropdownMenuItem(value:'Compétition',child:Text('Compétition')),
+          DropdownMenuItem(value:'Entraînement exceptionnel',child:Text('Entraînement exceptionnel')),
+          DropdownMenuItem(value:'Stage',child:Text('Stage')),
+          DropdownMenuItem(value:'Test badge',child:Text('Test badge')),
+        ],onChanged:(v){if(v!=null)setLocal(()=>type=v);}),
+        const SizedBox(height:12),
+        DropdownButtonFormField<String>(initialValue:selectedGroup,decoration:const InputDecoration(labelText:'Groupe'),items:groups.map((g)=>DropdownMenuItem(value:g.id,child:Text(g.name))).toList(),onChanged:(v){if(v!=null)setLocal(()=>selectedGroup=v);}),
+        const SizedBox(height:10),
+        const Text('Démarrage immédiat. Fermeture manuelle ou sécurité automatique après 4 h.',style:TextStyle(fontSize:12,color:Colors.white60)),
+      ]),
+      actions:[TextButton(onPressed:()=>Navigator.pop(dc,false),child:const Text('ANNULER')),FilledButton(onPressed:()=>Navigator.pop(dc,true),child:const Text('OUVRIR'))],
+    )));
+    if(ok!=true||!mounted)return;
+    final n=DateTime.now(),exp=members.where((m)=>m.groups.contains(selectedGroup)).toList();
+    final s=TrainingSession(id:'manual-${n.millisecondsSinceEpoch}',groupId:selectedGroup,date:DateTime(n.year,n.month,n.day),openedAt:n,expectedMemberIds:List.unmodifiable(exp.map((m)=>m.id)),label:type,startTime:n,endTime:n,eligibleGroupIds:[selectedGroup],manualType:type,excludeFromStats:type=='Test badge');
+    setState((){sessions.add(s);activeSession=s;groupId=selectedGroup;sessionOpen=true;result=null;});
+  }
+
+  void _autoCloseExpiredSessionIfNeeded(){
+    final s=activeSession;if(s==null||!s.isOpen||s.endTime==null)return;
+    if(DateTime.now().isBefore(s.endTime!.add(const Duration(hours:4))))return;
+    final i=sessions.indexWhere((x)=>x.id==s.id),closed=s.close(DateTime.now());
+    setState((){if(i>=0)sessions[i]=closed;activeSession=null;sessionOpen=false;result=null;});
+  }
   @override
   void initState() {
     super.initState();
@@ -118,7 +199,11 @@ class _ClubNageHomeState extends State<ClubNageHome> {
   }
 
   TrainingGroup get currentGroup => groups.firstWhere((g) => g.id == groupId);
-  List<Member> get expectedMembers => members.where((m) => m.groups.contains(groupId)).toList();
+  List<Member> get expectedMembers {
+    final s=activeSession;
+    if(s!=null&&s.isOpen)return members.where((m)=>s.expectedMemberIds.contains(m.id)).toList();
+    return members.where((m)=>m.groups.contains(groupId)).toList();
+  }
   List<AttendanceRecord> get currentRecords {
     final session = activeSession;
     if (session == null || session.groupId != groupId) return [];
@@ -127,26 +212,7 @@ class _ClubNageHomeState extends State<ClubNageHome> {
   int get presentCount => currentRecords.where((r) => r.status == AttendanceStatus.present || r.status == AttendanceStatus.late).map((r) => r.memberId).toSet().length;
   int get lateCount => currentRecords.where((r) => r.status == AttendanceStatus.late).length;
 
-  void _openTrainingSession() {
-    final now = DateTime.now();
-
-    final session = TrainingSession(
-      id: '${groupId}-${now.millisecondsSinceEpoch}',
-      groupId: groupId,
-      date: DateTime(now.year, now.month, now.day),
-      openedAt: now,
-      expectedMemberIds: List<String>.unmodifiable(
-        expectedMembers.map((m) => m.id),
-      ),
-    );
-
-    setState(() {
-      sessions.add(session);
-      activeSession = session;
-      sessionOpen = true;
-      result = null;
-    });
-  }
+  void _openTrainingSession() { _openManualSessionDialog(); }
 
   Future<void> _closeTrainingSession() async {
     final session = activeSession;
@@ -232,6 +298,7 @@ class _ClubNageHomeState extends State<ClubNageHome> {
   }
 
   void _processIdentifier(String identifier, String method) {
+    _autoCloseExpiredSessionIfNeeded();
     if (!sessionOpen ||
         activeSession == null ||
         activeSession!.groupId != groupId ||
@@ -258,8 +325,9 @@ class _ClubNageHomeState extends State<ClubNageHome> {
       setState(() => result = AttendanceResult(status: AttendanceStatus.unknown, title: 'Licencié inconnu', message: '$method non associé à un licencié.', uid: identifier));
       return;
     }
-    if (!member.groups.contains(groupId)) {
-      setState(() => result = AttendanceResult(status: AttendanceStatus.denied, title: 'Mauvais groupe', message: '${member!.fullName} n’est pas inscrit sur ${currentGroup.name}.', member: member, uid: identifier));
+    final eligible=activeSession!.eligibleGroupIds.isEmpty?[groupId]:activeSession!.eligibleGroupIds;
+    if (!member.groups.any(eligible.contains)) {
+      setState(() => result = AttendanceResult(status: AttendanceStatus.denied, title: 'Mauvais groupe', message: '${member!.fullName} n’est pas inscrit à cette séance.', member: member, uid: identifier));
       return;
     }
     if (currentRecords.any((r) => r.memberId == member!.id)) {
@@ -267,9 +335,8 @@ class _ClubNageHomeState extends State<ClubNageHome> {
       return;
     }
     final now = DateTime.now();
-    final parts = currentGroup.startTime.split(':');
-    final start = DateTime(now.year, now.month, now.day, int.parse(parts[0]), int.parse(parts[1]));
-    final status = now.isAfter(start.add(const Duration(minutes: 10))) ? AttendanceStatus.late : AttendanceStatus.present;
+    final start=activeSession!.startTime??now;
+    final status=now.isAfter(start.add(const Duration(minutes:15)))?AttendanceStatus.late:AttendanceStatus.present;
     setState(() {
       records.add(AttendanceRecord(
         memberId: member!.id,
@@ -957,7 +1024,7 @@ class _ClubNageHomeState extends State<ClubNageHome> {
                 SizedBox(width: 10),
                 Expanded(
                   child: Text(
-                    'Aucun nageur pointé pour le moment.',
+                    'Aucun licencié pointé pour le moment.',
                     style: TextStyle(color: Colors.white60),
                   ),
                 ),
@@ -1155,24 +1222,23 @@ class _ClubNageHomeState extends State<ClubNageHome> {
     )),
   ]);
 
-  Widget _sessionsPage() => ListView(padding: const EdgeInsets.all(16), children: [
-    _groupSelector(),
-    const SizedBox(height: 12),
-    _hero('Séance', currentGroup.name, currentGroup.schedule, sessionOpen ? 'OUVERTE' : 'FERMÉE'),
-    const SizedBox(height: 12),
-    FilledButton.icon(
-      onPressed: sessionOpen
-          ? _closeTrainingSession
-          : _openTrainingSession,
-      icon: Icon(sessionOpen ? Icons.lock : Icons.lock_open),
-      label: Text(sessionOpen ? 'FERMER LA SÉANCE' : 'OUVRIR LA SÉANCE'),
-      style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(54)),
-    ),
-    const SizedBox(height: 18),
-    const Text('Calendrier des groupes', style: TextStyle(fontSize: 19, fontWeight: FontWeight.w800)),
-    const SizedBox(height: 8),
-    for (final g in groups) ListTile(leading: const Icon(Icons.event), title: Text(g.name), subtitle: Text(g.schedule)),
-  ]);
+  Widget _sessionsPage() {
+    final today=_todaySlots;
+    return ListView(padding:const EdgeInsets.all(16),children:[
+      const Text('Séances du jour',style:TextStyle(fontSize:24,fontWeight:FontWeight.w900)),
+      const SizedBox(height:4),
+      const Text('Ouverture H−30 min • retard H+15 min • fermeture de sécurité fin+4 h',style:TextStyle(color:Colors.white60)),
+      const SizedBox(height:14),
+      if(sessionOpen&&activeSession!=null) Card(child:ListTile(leading:const Icon(Icons.lock_open_rounded,color:green),title:Text(activeSession!.label??currentGroup.name,style:const TextStyle(fontWeight:FontWeight.w800)),subtitle:Text('OUVERTE • ${_time(activeSession!.openedAt)}'),trailing:FilledButton(onPressed:_closeTrainingSession,child:const Text('FERMER')))),
+      if(!sessionOpen)...today.map((slot){final can=_slotCanOpen(slot);return Card(child:ListTile(leading:Icon(can?Icons.play_circle_fill_rounded:Icons.schedule_rounded,color:can?green:Colors.white38),title:Text(slot['label'] as String,style:const TextStyle(fontWeight:FontWeight.w800)),subtitle:Text('${_dayName(slot['weekday'] as int)} • ${slot['start']}–${slot['end']}'),trailing:FilledButton(onPressed:can?()=>_openScheduledSession(slot):null,child:const Text('OUVRIR'))));}),
+      const SizedBox(height:14),
+      OutlinedButton.icon(onPressed:sessionOpen?null:_openManualSessionDialog,icon:const Icon(Icons.add_circle_outline_rounded),label:const Text('OUVRIR UNE SÉANCE MANUELLE'),style:OutlinedButton.styleFrom(minimumSize:const Size.fromHeight(56))),
+      const SizedBox(height:18),
+      const Text('Planning hebdomadaire',style:TextStyle(fontSize:19,fontWeight:FontWeight.w900)),
+      const SizedBox(height:8),
+      ..._weeklySlots.map((slot)=>ListTile(dense:true,leading:const Icon(Icons.event_outlined),title:Text(slot['label'] as String),subtitle:Text('${_dayName(slot['weekday'] as int)} • ${slot['start']}–${slot['end']}'))),
+    ]);
+  }
 
   Widget _presencePage() {
     final current = expectedMembers;
@@ -1245,7 +1311,7 @@ class _ClubNageHomeState extends State<ClubNageHome> {
           statsGroupId == 'all' || session.groupId == statsGroupId;
 
       // Une absence n'est définitive qu'une fois la séance clôturée.
-      return inPeriod && inGroup && !session.isOpen;
+      return inPeriod && inGroup && !session.isOpen && !session.excludeFromStats;
     }).toList();
 
     filtered.sort((a, b) => b.date.compareTo(a.date));
