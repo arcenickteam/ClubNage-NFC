@@ -44,12 +44,24 @@ class _ClubNageHomeState extends State<ClubNageHome> {
   final NfcService nfc = NfcService();
   int page = 0;
   String groupId = 'mercredi';
-  bool sessionOpen = true;
+  bool sessionOpen = false;
   bool scanning = false;
   AttendanceResult? result;
   String memberSearch = '';
   final Map<String, String> assignedUids = {};
   final List<AttendanceRecord> records = [];
+
+  // Historique des séances réellement ouvertes dans l'application.
+  final List<TrainingSession> sessions = [];
+
+  // Séance actuellement utilisée pour le pointage NFC / QR.
+  TrainingSession? activeSession;
+
+  // Filtres des statistiques par période.
+  String statsPeriod = '30j';
+  String statsGroupId = 'all';
+  DateTime? statsCustomStart;
+  DateTime? statsCustomEnd;
 
   final groups = const [
     TrainingGroup('mercredi', 'Groupe du mercredi', 'Mercredi', '17:00', '18:00'),
@@ -107,9 +119,59 @@ class _ClubNageHomeState extends State<ClubNageHome> {
 
   TrainingGroup get currentGroup => groups.firstWhere((g) => g.id == groupId);
   List<Member> get expectedMembers => members.where((m) => m.groups.contains(groupId)).toList();
-  List<AttendanceRecord> get currentRecords => records.where((r) => r.groupId == groupId).toList();
+  List<AttendanceRecord> get currentRecords {
+    final session = activeSession;
+    if (session == null || session.groupId != groupId) return [];
+    return records.where((r) => r.sessionId == session.id).toList();
+  }
   int get presentCount => currentRecords.where((r) => r.status == AttendanceStatus.present || r.status == AttendanceStatus.late).map((r) => r.memberId).toSet().length;
   int get lateCount => currentRecords.where((r) => r.status == AttendanceStatus.late).length;
+
+  void _openTrainingSession() {
+    final now = DateTime.now();
+
+    final session = TrainingSession(
+      id: '${groupId}-${now.millisecondsSinceEpoch}',
+      groupId: groupId,
+      date: DateTime(now.year, now.month, now.day),
+      openedAt: now,
+      expectedMemberIds: List<String>.unmodifiable(
+        expectedMembers.map((m) => m.id),
+      ),
+    );
+
+    setState(() {
+      sessions.add(session);
+      activeSession = session;
+      sessionOpen = true;
+      result = null;
+    });
+  }
+
+  Future<void> _closeTrainingSession() async {
+    final session = activeSession;
+
+    if (session != null && session.isOpen) {
+      final closed = session.close(DateTime.now());
+      final index = sessions.indexWhere((s) => s.id == session.id);
+
+      setState(() {
+        if (index >= 0) {
+          sessions[index] = closed;
+        }
+        activeSession = null;
+        sessionOpen = false;
+        result = null;
+      });
+    } else {
+      setState(() {
+        activeSession = null;
+        sessionOpen = false;
+        result = null;
+      });
+    }
+
+  }
 
   Future<void> _go(int index) async {
     // Le Scanner NFC est un mode actif.
@@ -170,6 +232,20 @@ class _ClubNageHomeState extends State<ClubNageHome> {
   }
 
   void _processIdentifier(String identifier, String method) {
+    if (!sessionOpen ||
+        activeSession == null ||
+        activeSession!.groupId != groupId ||
+        !activeSession!.isOpen) {
+      setState(() {
+        result = const AttendanceResult(
+          status: AttendanceStatus.denied,
+          title: 'Séance fermée',
+          message: 'Ouvrez une séance avant de commencer le pointage.',
+        );
+      });
+      return;
+    }
+
     Member? member;
     if (method == 'NFC') {
       member = _memberForUid(identifier);
@@ -195,7 +271,14 @@ class _ClubNageHomeState extends State<ClubNageHome> {
     final start = DateTime(now.year, now.month, now.day, int.parse(parts[0]), int.parse(parts[1]));
     final status = now.isAfter(start.add(const Duration(minutes: 10))) ? AttendanceStatus.late : AttendanceStatus.present;
     setState(() {
-      records.add(AttendanceRecord(memberId: member!.id, groupId: groupId, timestamp: now, status: status, method: method));
+      records.add(AttendanceRecord(
+        memberId: member!.id,
+        groupId: groupId,
+        sessionId: activeSession!.id,
+        timestamp: now,
+        status: status,
+        method: method,
+      ));
       result = AttendanceResult(status: status, title: status == AttendanceStatus.late ? 'Retard enregistré' : 'Présent', message: member.fullName, member: member, uid: identifier);
     });
   }
@@ -728,7 +811,7 @@ class _ClubNageHomeState extends State<ClubNageHome> {
               Text(
                 scanning
                     ? 'LECTURE NFC ACTIVE'
-                    : 'POINTAGE DES NAGEURS',
+                    : 'POINTAGE DES LICENCIÉS',
                 textAlign: TextAlign.center,
                 style: const TextStyle(
                   fontSize: 22,
@@ -742,7 +825,7 @@ class _ClubNageHomeState extends State<ClubNageHome> {
               Text(
                 scanning
                     ? 'Approchez un porte-clé NFC du téléphone.\n'
-                      'Le lecteur reste actif pour le nageur suivant.'
+                      'Le lecteur reste actif pour le licencié suivant.'
                     : sessionOpen
                         ? 'Démarrez le lecteur NFC pour enregistrer les présences.'
                         : 'La séance est actuellement fermée.',
@@ -1078,7 +1161,9 @@ class _ClubNageHomeState extends State<ClubNageHome> {
     _hero('Séance', currentGroup.name, currentGroup.schedule, sessionOpen ? 'OUVERTE' : 'FERMÉE'),
     const SizedBox(height: 12),
     FilledButton.icon(
-      onPressed: () => setState(() { sessionOpen = !sessionOpen; result = null; }),
+      onPressed: sessionOpen
+          ? _closeTrainingSession
+          : _openTrainingSession,
       icon: Icon(sessionOpen ? Icons.lock : Icons.lock_open),
       label: Text(sessionOpen ? 'FERMER LA SÉANCE' : 'OUVRIR LA SÉANCE'),
       style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(54)),
@@ -1113,27 +1198,593 @@ class _ClubNageHomeState extends State<ClubNageHome> {
     ]);
   }
 
+  DateTime _dateOnly(DateTime d) => DateTime(d.year, d.month, d.day);
+
+  DateTime get _statsStartDate {
+    final today = _dateOnly(DateTime.now());
+
+    switch (statsPeriod) {
+      case 'today':
+        return today;
+      case '7j':
+        return today.subtract(const Duration(days: 6));
+      case '30j':
+        return today.subtract(const Duration(days: 29));
+      case 'season':
+        return today.month >= 9
+            ? DateTime(today.year, 9, 1)
+            : DateTime(today.year - 1, 9, 1);
+      case 'custom':
+        return _dateOnly(statsCustomStart ?? today);
+      default:
+        return today.subtract(const Duration(days: 29));
+    }
+  }
+
+  DateTime get _statsEndDate {
+    final today = _dateOnly(DateTime.now());
+
+    if (statsPeriod == 'custom') {
+      return _dateOnly(statsCustomEnd ?? today);
+    }
+
+    return today;
+  }
+
+  List<TrainingSession> get _filteredStatsSessions {
+    final start = _statsStartDate;
+    final endExclusive = _statsEndDate.add(const Duration(days: 1));
+
+    final filtered = sessions.where((session) {
+      final date = _dateOnly(session.date);
+
+      final inPeriod =
+          !date.isBefore(start) && date.isBefore(endExclusive);
+
+      final inGroup =
+          statsGroupId == 'all' || session.groupId == statsGroupId;
+
+      // Une absence n'est définitive qu'une fois la séance clôturée.
+      return inPeriod && inGroup && !session.isOpen;
+    }).toList();
+
+    filtered.sort((a, b) => b.date.compareTo(a.date));
+    return filtered;
+  }
+
+  List<AttendanceRecord> _recordsForSession(TrainingSession session) =>
+      records.where((r) => r.sessionId == session.id).toList();
+
+  Set<String> _presentMemberIdsForSession(TrainingSession session) =>
+      _recordsForSession(session)
+          .where((r) =>
+              r.status == AttendanceStatus.present ||
+              r.status == AttendanceStatus.late)
+          .map((r) => r.memberId)
+          .toSet();
+
+  int get _statsExpectedCount =>
+      _filteredStatsSessions.fold(
+        0,
+        (sum, session) => sum + session.expectedMemberIds.length,
+      );
+
+  int get _statsPresentCount =>
+      _filteredStatsSessions.fold(
+        0,
+        (sum, session) =>
+            sum + _presentMemberIdsForSession(session).length,
+      );
+
+  int get _statsAbsentCount {
+    final absent = _statsExpectedCount - _statsPresentCount;
+    return absent < 0 ? 0 : absent;
+  }
+
+  int get _statsLateCount =>
+      _filteredStatsSessions.fold(
+        0,
+        (sum, session) =>
+            sum +
+            _recordsForSession(session)
+                .where((r) => r.status == AttendanceStatus.late)
+                .map((r) => r.memberId)
+                .toSet()
+                .length,
+      );
+
+  int get _statsAttendanceRate {
+    final expected = _statsExpectedCount;
+    if (expected == 0) return 0;
+    return (_statsPresentCount / expected * 100).round();
+  }
+
+  String _shortDate(DateTime d) =>
+      '${d.day.toString().padLeft(2, '0')}/'
+      '${d.month.toString().padLeft(2, '0')}/'
+      '${d.year}';
+
+  Future<void> _pickStatsCustomPeriod() async {
+    final today = _dateOnly(DateTime.now());
+
+    final picked = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(today.year - 3, 1, 1),
+      lastDate: DateTime(today.year + 1, 12, 31),
+      initialDateRange: DateTimeRange(
+        start: statsCustomStart ?? today.subtract(const Duration(days: 29)),
+        end: statsCustomEnd ?? today,
+      ),
+      helpText: 'PÉRIODE DES STATISTIQUES',
+      cancelText: 'ANNULER',
+      confirmText: 'VALIDER',
+    );
+
+    if (picked == null || !mounted) return;
+
+    setState(() {
+      statsCustomStart = _dateOnly(picked.start);
+      statsCustomEnd = _dateOnly(picked.end);
+      statsPeriod = 'custom';
+    });
+  }
+
+  Widget _statsPeriodButton(String value, String label) {
+    return ChoiceChip(
+      label: Text(label),
+      selected: statsPeriod == value,
+      onSelected: (_) {
+        if (value == 'custom') {
+          _pickStatsCustomPeriod();
+        } else {
+          setState(() => statsPeriod = value);
+        }
+      },
+    );
+  }
+
+  Widget _memberStatsCard(
+    Member member,
+    List<TrainingSession> filteredSessions,
+  ) {
+    final memberSessions = filteredSessions
+        .where((s) => s.expectedMemberIds.contains(member.id))
+        .toList();
+
+    final expected = memberSessions.length;
+
+    int present = 0;
+    int late = 0;
+
+    for (final session in memberSessions) {
+      final memberRecords = _recordsForSession(session)
+          .where((r) => r.memberId == member.id)
+          .toList();
+
+      final wasPresent = memberRecords.any(
+        (r) =>
+            r.status == AttendanceStatus.present ||
+            r.status == AttendanceStatus.late,
+      );
+
+      final wasLate = memberRecords.any(
+        (r) => r.status == AttendanceStatus.late,
+      );
+
+      if (wasPresent) present++;
+      if (wasLate) late++;
+    }
+
+    final absent = expected - present;
+    final rate = expected == 0
+        ? 0
+        : (present / expected * 100).round();
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                CircleAvatar(
+                  child: Text(
+                    member.firstName.isNotEmpty
+                        ? member.firstName[0].toUpperCase()
+                        : '?',
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        member.fullName,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                      Text(
+                        '$expected séance${expected > 1 ? 's' : ''} prévue${expected > 1 ? 's' : ''}',
+                        style: const TextStyle(
+                          color: Colors.white60,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Text(
+                  '$rate %',
+                  style: TextStyle(
+                    color: rate >= 80
+                        ? green
+                        : rate >= 60
+                            ? orange
+                            : Colors.redAccent,
+                    fontSize: 20,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                Expanded(
+                  child: _scannerMiniMetric(
+                    'Présences',
+                    '$present',
+                    Icons.check_circle_rounded,
+                    green,
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: _scannerMiniMetric(
+                    'Absences',
+                    '$absent',
+                    Icons.cancel_rounded,
+                    Colors.redAccent,
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: _scannerMiniMetric(
+                    'Retards',
+                    '$late',
+                    Icons.schedule_rounded,
+                    orange,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _statsPage() {
-    final expected = expectedMembers.length;
-    final rate = expected == 0 ? 0 : (presentCount / expected * 100).round();
-    return ListView(padding: const EdgeInsets.all(16), children: [
-      _groupSelector(),
-      const SizedBox(height: 12),
-      Row(children: [Expanded(child: _metric('Présence', '$rate %', Icons.percent, cyan)), const SizedBox(width: 8), Expanded(child: _metric('Retards', '$lateCount', Icons.schedule, orange))]),
-      const SizedBox(height: 8),
-      Row(children: [Expanded(child: _metric('Licenciés', '${members.length}', Icons.people, blue)), const SizedBox(width: 8), Expanded(child: _metric('Badges', '${assignedUids.length}', Icons.nfc, green))]),
-      const SizedBox(height: 16),
-      const Card(child: ListTile(leading: Icon(Icons.date_range), title: Text('Statistiques par période'), subtitle: Text('Structure prête pour alimentation par le journal de présences synchronisé.'))),
-      const SizedBox(height: 8),
-      _syncCard(),
-    ]);
+    final filteredSessions = _filteredStatsSessions;
+    final sessionCount = filteredSessions.length;
+
+    final start = _statsStartDate;
+    final end = _statsEndDate;
+
+    final periodLabel = _shortDate(start) == _shortDate(end)
+        ? _shortDate(start)
+        : '${_shortDate(start)} → ${_shortDate(end)}';
+
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        const Text(
+          'Statistiques par période',
+          style: TextStyle(
+            fontSize: 24,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+        const SizedBox(height: 4),
+        const Text(
+          'Analyse de l’assiduité des licenciés.',
+          style: TextStyle(color: Colors.white60),
+        ),
+        const SizedBox(height: 18),
+
+        const Text(
+          'Période',
+          style: TextStyle(
+            fontWeight: FontWeight.w800,
+            color: cyan,
+          ),
+        ),
+        const SizedBox(height: 8),
+
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            _statsPeriodButton('today', 'Aujourd’hui'),
+            _statsPeriodButton('7j', '7 jours'),
+            _statsPeriodButton('30j', '30 jours'),
+            _statsPeriodButton('season', 'Saison'),
+            _statsPeriodButton('custom', 'Personnalisée'),
+          ],
+        ),
+
+        const SizedBox(height: 16),
+
+        DropdownButtonFormField<String>(
+          key: ValueKey('stats-$statsGroupId'),
+          initialValue: statsGroupId,
+          decoration: const InputDecoration(
+            labelText: 'Groupe',
+            prefixIcon: Icon(Icons.groups_outlined),
+          ),
+          items: [
+            const DropdownMenuItem(
+              value: 'all',
+              child: Text('Tous les groupes'),
+            ),
+            ...groups.map(
+              (g) => DropdownMenuItem(
+                value: g.id,
+                child: Text(g.name),
+              ),
+            ),
+          ],
+          onChanged: (value) {
+            if (value == null) return;
+            setState(() => statsGroupId = value);
+          },
+        ),
+
+        const SizedBox(height: 12),
+
+        Card(
+          child: ListTile(
+            leading: const Icon(
+              Icons.date_range_rounded,
+              color: cyan,
+            ),
+            title: Text(
+              periodLabel,
+              style: const TextStyle(
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            subtitle: Text(
+              statsGroupId == 'all'
+                  ? 'Tous les groupes'
+                  : groups
+                      .firstWhere((g) => g.id == statsGroupId)
+                      .name,
+            ),
+            trailing: statsPeriod == 'custom'
+                ? IconButton(
+                    onPressed: _pickStatsCustomPeriod,
+                    icon: const Icon(
+                      Icons.edit_calendar_outlined,
+                    ),
+                  )
+                : null,
+          ),
+        ),
+
+        const SizedBox(height: 16),
+
+        Row(
+          children: [
+            Expanded(
+              child: _metric(
+                'Séances',
+                '$sessionCount',
+                Icons.event_available_rounded,
+                blue,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _metric(
+                'Taux de présence',
+                '$_statsAttendanceRate %',
+                Icons.percent_rounded,
+                cyan,
+              ),
+            ),
+          ],
+        ),
+
+        const SizedBox(height: 8),
+
+        Row(
+          children: [
+            Expanded(
+              child: _metric(
+                'Présences',
+                '$_statsPresentCount',
+                Icons.check_circle_rounded,
+                green,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _metric(
+                'Absences',
+                '$_statsAbsentCount',
+                Icons.cancel_rounded,
+                Colors.redAccent,
+              ),
+            ),
+          ],
+        ),
+
+        const SizedBox(height: 8),
+
+        Row(
+          children: [
+            Expanded(
+              child: _metric(
+                'Retards',
+                '$_statsLateCount',
+                Icons.schedule_rounded,
+                orange,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _metric(
+                'Attendus',
+                '$_statsExpectedCount',
+                Icons.people_alt_rounded,
+                blue,
+              ),
+            ),
+          ],
+        ),
+
+        const SizedBox(height: 18),
+
+        if (filteredSessions.isEmpty)
+          const Card(
+            child: Padding(
+              padding: EdgeInsets.all(20),
+              child: Column(
+                children: [
+                  Icon(
+                    Icons.query_stats_rounded,
+                    size: 42,
+                    color: Colors.white38,
+                  ),
+                  SizedBox(height: 10),
+                  Text(
+                    'Aucune séance sur cette période',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  SizedBox(height: 5),
+                  Text(
+                    'Les statistiques seront alimentées par les séances enregistrées.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Colors.white60,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          )
+        else ...[
+          const Text(
+            'Séances de la période',
+            style: TextStyle(
+              fontSize: 19,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 8),
+
+          for (final session in filteredSessions)
+            Card(
+              child: ListTile(
+                leading: const Icon(
+                  Icons.pool_rounded,
+                  color: cyan,
+                ),
+                title: Text(
+                  groups
+                      .firstWhere((g) => g.id == session.groupId)
+                      .name,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                subtitle: Text(
+                  '${_shortDate(session.date)} • '
+                  '${_presentMemberIdsForSession(session).length}'
+                  '/${session.expectedMemberIds.length} présents',
+                ),
+                trailing: Icon(
+                  session.isOpen
+                      ? Icons.lock_open_rounded
+                      : Icons.check_circle_outline_rounded,
+                  color: session.isOpen ? orange : green,
+                ),
+              ),
+            ),
+        ],
+
+        if (filteredSessions.isNotEmpty) ...[
+          const SizedBox(height: 22),
+
+          const Text(
+            'Assiduité des licenciés',
+            style: TextStyle(
+              fontSize: 19,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+
+          const SizedBox(height: 4),
+
+          const Text(
+            'Résultats calculés sur les séances clôturées de la période.',
+            style: TextStyle(
+              color: Colors.white60,
+              fontSize: 12,
+            ),
+          ),
+
+          const SizedBox(height: 10),
+
+          for (final member in members)
+            if (filteredSessions.any(
+              (s) => s.expectedMemberIds.contains(member.id),
+            ))
+              _memberStatsCard(member, filteredSessions),
+        ],
+
+        const SizedBox(height: 16),
+        _syncCard(),
+      ],
+    );
   }
 
   Widget _groupSelector() => DropdownButtonFormField<String>(
+    key: ValueKey(groupId),
     initialValue: groupId,
-    decoration: const InputDecoration(labelText: 'Groupe / séance'),
-    items: groups.map((g) => DropdownMenuItem(value: g.id, child: Text(g.name))).toList(),
-    onChanged: (v) { if (v != null) setState(() { groupId = v; result = null; }); },
+    decoration: InputDecoration(
+      labelText: 'Groupe / séance',
+      helperText: sessionOpen
+          ? 'Fermez la séance pour changer de groupe'
+          : 'Sélectionnez le groupe à pointer',
+      prefixIcon: Icon(
+        sessionOpen ? Icons.lock_outline : Icons.groups_outlined,
+      ),
+    ),
+    items: groups
+        .map((g) => DropdownMenuItem(
+              value: g.id,
+              child: Text(g.name),
+            ))
+        .toList(),
+    onChanged: sessionOpen
+        ? null
+        : (v) {
+            if (v == null || v == groupId) return;
+            setState(() {
+              groupId = v;
+              result = null;
+            });
+          },
   );
 
   Widget _hero(String eyebrow, String title, String subtitle, String status) => Card(child: Padding(padding: const EdgeInsets.all(18), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [

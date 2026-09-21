@@ -35,6 +35,35 @@ class TrainingGroup {
   String get schedule => '$day • $startTime–$endTime';
 }
 
+class TrainingSession {
+  final String id;
+  final String groupId;
+  final DateTime date;
+  final DateTime openedAt;
+  final DateTime? closedAt;
+  final List<String> expectedMemberIds;
+
+  const TrainingSession({
+    required this.id,
+    required this.groupId,
+    required this.date,
+    required this.openedAt,
+    this.closedAt,
+    required this.expectedMemberIds,
+  });
+
+  bool get isOpen => closedAt == null;
+
+  TrainingSession close(DateTime time) => TrainingSession(
+        id: id,
+        groupId: groupId,
+        date: date,
+        openedAt: openedAt,
+        closedAt: time,
+        expectedMemberIds: expectedMemberIds,
+      );
+}
+
 enum AttendanceStatus { present, late, duplicate, denied, unknown }
 
 class AttendanceResult {
@@ -52,9 +81,17 @@ class AttendanceResult {
 class AttendanceRecord {
   final String memberId;
   final String groupId;
+  final String? sessionId;
   final DateTime timestamp;
   final AttendanceStatus status;
   final String method;
 
-  const AttendanceRecord({required this.memberId, required this.groupId, required this.timestamp, required this.status, required this.method});
+  const AttendanceRecord({
+    required this.memberId,
+    required this.groupId,
+    this.sessionId,
+    required this.timestamp,
+    required this.status,
+    required this.method,
+  });
 }
