@@ -212,8 +212,6 @@ class _ClubNageHomeState extends State<ClubNageHome> {
   int get presentCount => currentRecords.where((r) => r.status == AttendanceStatus.present || r.status == AttendanceStatus.late).map((r) => r.memberId).toSet().length;
   int get lateCount => currentRecords.where((r) => r.status == AttendanceStatus.late).length;
 
-  void _openTrainingSession() { _openManualSessionDialog(); }
-
   Future<void> _closeTrainingSession() async {
     final session = activeSession;
 
