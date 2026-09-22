@@ -8,6 +8,8 @@ class Member {
   final String dossierStatus;
   final String email;
   final String phone;
+  final String dateOfBirth;
+  final String legalRepresentative;
 
   const Member({
     required this.id,
@@ -19,9 +21,22 @@ class Member {
     this.dossierStatus = 'Validé',
     this.email = '',
     this.phone = '',
+    this.dateOfBirth = '',
+    this.legalRepresentative = '',
   });
 
   String get fullName => '$firstName $lastName';
+
+  int? get age {
+    final p = dateOfBirth.split('/');
+    if (p.length != 3) return null;
+    final birth = DateTime.tryParse('${p[2]}-${p[1].padLeft(2, '0')}-${p[0].padLeft(2, '0')}');
+    if (birth == null) return null;
+    final now = DateTime.now();
+    var years = now.year - birth.year;
+    if (now.month < birth.month || (now.month == birth.month && now.day < birth.day)) years--;
+    return years;
+  }
 }
 
 class TrainingGroup {

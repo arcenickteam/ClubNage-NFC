@@ -77,10 +77,28 @@ class _ClubNageHomeState extends State<ClubNageHome> {
   ];
 
   final members = const [
-    Member(id: 'M1001', firstName: 'Lucas', lastName: 'Martin', groups: ['juniors'], nfcUid: '04:11:22:33:44:55:66', qrToken: 'CN:M1001', email: 'lucas@example.fr'),
-    Member(id: 'M1002', firstName: 'Emma', lastName: 'Dupont', groups: ['jaune', 'bleu'], nfcUid: '04:22:33:44:55:66:77', qrToken: 'CN:M1002', phone: '06 00 00 00 02'),
-    Member(id: 'M1003', firstName: 'Hugo', lastName: 'Bernard', groups: ['rouge'], nfcUid: '04:33:44:55:66:77:88', qrToken: 'CN:M1003', dossierStatus: 'À compléter'),
-    Member(id: 'M1004', firstName: 'Léa', lastName: 'Robert', groups: ['violet', 'vert'], nfcUid: '04:44:55:66:77:88:99', qrToken: 'CN:M1004'),
+    Member(id: 'M2001', firstName: 'Laura', lastName: 'Jordan', groups: ['benjamins'], nfcUid: '', qrToken: 'CN:M2001', dossierStatus: 'Validé', email: 'annelaure.jordan@free.fr', phone: '06 82 79 58 94', dateOfBirth: '15/01/2014', legalRepresentative: 'JORDAN Anne Laure'),
+    Member(id: 'M2002', firstName: 'Klara', lastName: 'Thomas', groups: ['benjamins'], nfcUid: '', qrToken: 'CN:M2002', dossierStatus: 'Validé', email: 'thomasklara791@gmail.com   karine.thomas18@orange.fr fabien.thomas71@laposte.net', phone: '0660475763 0608279557', dateOfBirth: '10/06/2013', legalRepresentative: 'THOMAS KARINE THOMAS FABIEN'),
+    Member(id: 'M2003', firstName: 'Selma', lastName: 'Lagrimi', groups: ['avenirs'], nfcUid: '', qrToken: 'CN:M2003', dossierStatus: 'À compléter', email: 'celine.lagrimi@yahoo.com', phone: '06 07 66 26 26', dateOfBirth: '23/03/2017', legalRepresentative: ''),
+    Member(id: 'M2004', firstName: 'Noémie', lastName: 'Seguin', groups: ['avenirs'], nfcUid: '', qrToken: 'CN:M2004', dossierStatus: 'Validé', email: 'davidseguin@orange.fr', phone: '06 84 01 51 42', dateOfBirth: '11/12/2017', legalRepresentative: 'SEGUIN DAVID'),
+    Member(id: 'M2005', firstName: 'Anna', lastName: 'Lance', groups: ['avenirs'], nfcUid: '', qrToken: 'CN:M2005', dossierStatus: 'Validé', email: 'fxcharlotte@gmail.com', phone: '06 63 98 29 39', dateOfBirth: '01/02/2017', legalRepresentative: 'LANCE François-Xavier'),
+    Member(id: 'M2006', firstName: 'Rose', lastName: 'Proby', groups: ['benjamins'], nfcUid: '', qrToken: 'CN:M2006', dossierStatus: 'Validé', email: 'claire.proby@gmail.com', phone: '06 72 48 56 30', dateOfBirth: '07/12/2012', legalRepresentative: 'PROBY CLAIRE'),
+    Member(id: 'M2007', firstName: 'Tom', lastName: 'Proby', groups: ['avenirs'], nfcUid: '', qrToken: 'CN:M2007', dossierStatus: 'Validé', email: 'claire.proby@gmail.com', phone: '06 72 48 56 30', dateOfBirth: '20/06/2016', legalRepresentative: 'PROBY CLAIRE'),
+    Member(id: 'M2008', firstName: 'Charly', lastName: 'Proby', groups: ['benjamins'], nfcUid: '', qrToken: 'CN:M2008', dossierStatus: 'Validé', email: 'claire.proby@gmail.com', phone: '06 72 48 56 30', dateOfBirth: '04/03/2014', legalRepresentative: 'PROBY CLAIRE'),
+    Member(id: 'M2009', firstName: 'Louis', lastName: 'Bernigaud', groups: ['juniors'], nfcUid: '', qrToken: 'CN:M2009', dossierStatus: 'Validé', email: 'louisbngd@gmail.com', phone: '0769853019', dateOfBirth: '26/04/2010', legalRepresentative: 'David Bernigaud'),
+    Member(id: 'M2010', firstName: 'Baptiste', lastName: 'Oliana', groups: ['juniors'], nfcUid: '', qrToken: 'CN:M2010', dossierStatus: 'Validé', email: 'baptoli2005@gmail.com', phone: '0769758320', dateOfBirth: '28/07/2005', legalRepresentative: ''),
+    Member(id: 'M2011', firstName: 'Abel', lastName: 'Marques', groups: ['avenirs'], nfcUid: '', qrToken: 'CN:M2011', dossierStatus: 'À compléter', email: 'severine.skubala@hotmail.fr', phone: '0608237330', dateOfBirth: '15/06/2016', legalRepresentative: ''),
+    Member(id: 'M2012', firstName: 'Manon', lastName: 'Laupretre', groups: ['benjamins'], nfcUid: '', qrToken: 'CN:M2012', dossierStatus: 'Validé', email: 'finfinefleur@yahoo.fr', phone: '0684183242 0785138520', dateOfBirth: '03/10/2014', legalRepresentative: 'Delphine LAUPRETRE'),
+    Member(id: 'M2013', firstName: 'Julia', lastName: 'Hublart', groups: ['avenirs'], nfcUid: '', qrToken: 'CN:M2013', dossierStatus: 'À compléter', email: 'fabhublart@yahoo.fr', phone: '0627570356', dateOfBirth: '10/11/2015', legalRepresentative: ''),
+    Member(id: 'M2014', firstName: 'Yanis', lastName: 'Repy', groups: ['juniors'], nfcUid: '', qrToken: 'CN:M2014', dossierStatus: 'Validé', email: 'yanisrepy@gmail.com hayet71@hotmail.com', phone: '0763160686 0687703527 Hayet', dateOfBirth: '04/06/2013', legalRepresentative: 'FERHI MOJRANE'),
+    Member(id: 'M2015', firstName: 'Nathan', lastName: 'Chauvy', groups: ['juniors'], nfcUid: '', qrToken: 'CN:M2015', dossierStatus: 'Validé', email: 'deborahheritier@hotmail.fr', phone: '07 66 75 77 08', dateOfBirth: '20/05/2013', legalRepresentative: 'DEBORAH HERITIER'),
+    Member(id: 'M2016', firstName: 'Emma', lastName: 'Kermabon', groups: ['benjamins'], nfcUid: '', qrToken: 'CN:M2016', dossierStatus: 'Validé', email: 'jerome.kermabon@gmail.com', phone: '0674633717 Emma 0631515043 Jerome', dateOfBirth: '03/08/2014', legalRepresentative: 'JEROME KERMABON'),
+    Member(id: 'M2017', firstName: 'Lola', lastName: 'Kermabon', groups: ['juniors'], nfcUid: '', qrToken: 'CN:M2017', dossierStatus: 'Validé', email: 'karmabonlola@gmail.com', phone: '0607490979', dateOfBirth: '02/12/2008', legalRepresentative: 'JEROME KERMABON'),
+    Member(id: 'M2018', firstName: 'Max', lastName: 'Richard', groups: ['juniors'], nfcUid: '', qrToken: 'CN:M2018', dossierStatus: 'Validé', email: 'faiza_redjdal@yahoo.fr', phone: '0761920620', dateOfBirth: '17/07/2012', legalRepresentative: 'FAIZA REDJDAL'),
+    Member(id: 'M2019', firstName: 'Farrah', lastName: 'Richard', groups: ['juniors'], nfcUid: '', qrToken: 'CN:M2019', dossierStatus: 'Validé', email: 'fafarich2010@gmail.com', phone: '0763584373', dateOfBirth: '27/10/2020', legalRepresentative: 'FAIZA REDJDAL'),
+    Member(id: 'M2020', firstName: 'Paul', lastName: 'Frizot', groups: ['juniors'], nfcUid: '', qrToken: 'CN:M2020', dossierStatus: 'Validé', email: 'collard.aude@laposte.net', phone: '0687072637', dateOfBirth: '08/03/2012', legalRepresentative: 'FRIZOT GUILLAUME'),
+    Member(id: 'M2021', firstName: 'Marie', lastName: 'Jacquet', groups: ['benjamins'], nfcUid: '', qrToken: 'CN:M2021', dossierStatus: 'Validé', email: 'chacoco.jacquet@gmail.com', phone: '0669567766', dateOfBirth: '21/11/2013', legalRepresentative: ''),
+    Member(id: 'M2022', firstName: 'Meissan', lastName: 'Kheddir', groups: ['benjamins'], nfcUid: '', qrToken: 'CN:M2022', dossierStatus: 'À compléter', email: 'hamidameissan@gmail.com', phone: '0605902735', dateOfBirth: '16/11/2014', legalRepresentative: ''),
   ];
 
 
@@ -93,9 +111,11 @@ class _ClubNageHomeState extends State<ClubNageHome> {
     {'id':'jun-ven','label':'Compétition Juniors','groups':['juniors'],'weekday':5,'start':'18:30','end':'20:00'},
     {'id':'jun-sam','label':'Compétition Juniors','groups':['juniors'],'weekday':6,'start':'12:00','end':'13:15'},
     {'id':'ben-lun','label':'Compétition Benjamins','groups':['benjamins'],'weekday':1,'start':'18:00','end':'19:30'},
+    {'id':'ben-mar','label':'Compétition Benjamins','groups':['benjamins'],'weekday':2,'start':'19:15','end':'20:15'},
     {'id':'ben-jeu','label':'Compétition Benjamins','groups':['benjamins'],'weekday':4,'start':'18:15','end':'19:30'},
     {'id':'ben-ven','label':'Compétition Benjamins','groups':['benjamins'],'weekday':5,'start':'18:30','end':'20:00'},
     {'id':'av-lun','label':'Compétition Avenirs','groups':['avenirs'],'weekday':1,'start':'18:00','end':'19:00'},
+    {'id':'av-mer','label':'Compétition Avenirs','groups':['avenirs'],'weekday':3,'start':'13:30','end':'14:45'},
     {'id':'av-ven','label':'Compétition Avenirs','groups':['avenirs'],'weekday':5,'start':'17:30','end':'18:30'},
     {'id':'conf-mar','label':'Confirmés – Rouge / Violet / Bleu / Vert','groups':['rouge','violet','bleu','vert'],'weekday':2,'start':'18:15','end':'19:15'},
     {'id':'conf-sam','label':'Confirmés – Rouge / Violet / Bleu / Vert','groups':['rouge','violet','bleu','vert'],'weekday':6,'start':'11:00','end':'12:00'},
@@ -737,11 +757,45 @@ class _ClubNageHomeState extends State<ClubNageHome> {
     );
   }
 
+  String get _activeSessionLabel => activeSession?.label ?? currentGroup.name;
+
+  String get _activeSessionSchedule {
+    final s = activeSession;
+    if (s?.startTime != null && s?.endTime != null) {
+      return '${_dayName(s!.startTime!.weekday)} • ${_time(s.startTime!)}–${_time(s.endTime!)}';
+    }
+    return currentGroup.schedule;
+  }
+
+  Widget _coloredGroupLabel(String label, {double fontSize = 16, FontWeight fontWeight = FontWeight.w800}) {
+    if (label.contains('Rouge / Violet / Bleu / Vert')) {
+      return Text.rich(TextSpan(style: TextStyle(fontSize: fontSize, fontWeight: fontWeight, color: Colors.white), children: const [
+        TextSpan(text: 'Confirmés – '),
+        TextSpan(text: 'Rouge', style: TextStyle(color: Colors.redAccent)),
+        TextSpan(text: ' / '),
+        TextSpan(text: 'Violet', style: TextStyle(color: Colors.purpleAccent)),
+        TextSpan(text: ' / '),
+        TextSpan(text: 'Bleu', style: TextStyle(color: Colors.lightBlueAccent)),
+        TextSpan(text: ' / '),
+        TextSpan(text: 'Vert', style: TextStyle(color: green)),
+      ]));
+    }
+    if (label.contains('Débutants – Jaune')) {
+      final suffix = label.replaceFirst('Débutants – Jaune', '');
+      return Text.rich(TextSpan(style: TextStyle(fontSize: fontSize, fontWeight: fontWeight, color: Colors.white), children: [
+        const TextSpan(text: 'Débutants – '),
+        const TextSpan(text: 'Jaune', style: TextStyle(color: Colors.yellowAccent)),
+        if (suffix.isNotEmpty) TextSpan(text: suffix),
+      ]));
+    }
+    return Text(label, style: TextStyle(fontSize: fontSize, fontWeight: fontWeight));
+  }
+
   Widget _homePage() {
     final expected = expectedMembers.length;
     final absent = (expected - presentCount).clamp(0, expected);
     return ListView(padding: const EdgeInsets.all(16), children: [
-      _hero('Séance actuelle', currentGroup.name, currentGroup.schedule, sessionOpen ? 'OUVERTE' : 'FERMÉE'),
+      _hero('Séance actuelle', _activeSessionLabel, _activeSessionSchedule, sessionOpen ? 'OUVERTE' : 'FERMÉE'),
       const SizedBox(height: 12),
       Row(children: [Expanded(child: _metric('Attendus', '$expected', Icons.people_alt_outlined, cyan)), const SizedBox(width: 8), Expanded(child: _metric('Présents', '$presentCount', Icons.check_circle, green))]),
       const SizedBox(height: 8),
@@ -1165,7 +1219,7 @@ class _ClubNageHomeState extends State<ClubNageHome> {
                 if (r.member != null) ...[
                   const SizedBox(height: 3),
                   Text(
-                    currentGroup.name,
+                    _activeSessionLabel,
                     style: const TextStyle(
                       color: Colors.white60,
                       fontSize: 12,
@@ -1243,7 +1297,7 @@ class _ClubNageHomeState extends State<ClubNageHome> {
     return ListView(padding: const EdgeInsets.all(16), children: [
       _groupSelector(),
       const SizedBox(height: 12),
-      Text('${currentGroup.name} • $presentCount/${current.length} présents', style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w800)),
+      Row(children:[Expanded(child:_coloredGroupLabel(_activeSessionLabel, fontSize:19)), const SizedBox(width:8), Text('$presentCount/${current.length} présents', style:const TextStyle(fontSize:14,fontWeight:FontWeight.w800,color:Colors.white70))]),
       const SizedBox(height: 8),
       ...current.map((m) {
         AttendanceRecord? rec;
@@ -1258,7 +1312,7 @@ class _ClubNageHomeState extends State<ClubNageHome> {
       }),
       const SizedBox(height: 12),
       const Text('Historique', style: TextStyle(fontSize: 19, fontWeight: FontWeight.w800)),
-      for (final r in records.reversed) ListTile(dense: true, leading: const Icon(Icons.history), title: Text(_memberById(r.memberId).fullName), subtitle: Text('${_groupById(r.groupId).name} • ${_time(r.timestamp)} • ${r.method}')),
+      for (final r in records.reversed) ListTile(dense: true, leading: const Icon(Icons.history), title: Text(_memberById(r.memberId).fullName), subtitle: Text('${_sessionLabelForRecord(r)} • ${_time(r.timestamp)} • ${r.method}')),
     ]);
   }
 
@@ -1822,38 +1876,36 @@ class _ClubNageHomeState extends State<ClubNageHome> {
     );
   }
 
-  Widget _groupSelector() => DropdownButtonFormField<String>(
-    key: ValueKey(groupId),
-    initialValue: groupId,
-    decoration: InputDecoration(
-      labelText: 'Groupe / séance',
-      helperText: sessionOpen
-          ? 'Fermez la séance pour changer de groupe'
-          : 'Sélectionnez le groupe à pointer',
-      prefixIcon: Icon(
-        sessionOpen ? Icons.lock_outline : Icons.groups_outlined,
+  Widget _groupSelector() {
+    if (sessionOpen && activeSession != null) {
+      return InputDecorator(
+        decoration: const InputDecoration(
+          labelText: 'Groupe / séance',
+          helperText: 'Fermez la séance pour changer de groupe',
+          prefixIcon: Icon(Icons.lock_outline),
+        ),
+        child: _coloredGroupLabel(_activeSessionLabel, fontSize: 16),
+      );
+    }
+    return DropdownButtonFormField<String>(
+      key: ValueKey(groupId),
+      initialValue: groupId,
+      decoration: const InputDecoration(
+        labelText: 'Groupe / séance',
+        helperText: 'Sélectionnez le groupe à pointer',
+        prefixIcon: Icon(Icons.groups_outlined),
       ),
-    ),
-    items: groups
-        .map((g) => DropdownMenuItem(
-              value: g.id,
-              child: Text(g.name),
-            ))
-        .toList(),
-    onChanged: sessionOpen
-        ? null
-        : (v) {
-            if (v == null || v == groupId) return;
-            setState(() {
-              groupId = v;
-              result = null;
-            });
-          },
-  );
+      items: groups.map((g) => DropdownMenuItem(value: g.id, child: Text(g.name))).toList(),
+      onChanged: (v) {
+        if (v == null || v == groupId) return;
+        setState(() { groupId = v; result = null; });
+      },
+    );
+  }
 
   Widget _hero(String eyebrow, String title, String subtitle, String status) => Card(child: Padding(padding: const EdgeInsets.all(18), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
     Row(children: [Expanded(child: Text(eyebrow.toUpperCase(), style: const TextStyle(color: cyan, fontWeight: FontWeight.w800))), Chip(label: Text(status))]),
-    const SizedBox(height: 8), Text(title, style: const TextStyle(fontSize: 25, fontWeight: FontWeight.w900)), const SizedBox(height: 4), Text(subtitle, style: const TextStyle(color: Colors.white70)),
+    const SizedBox(height: 8), _coloredGroupLabel(title, fontSize: 25, fontWeight: FontWeight.w900), const SizedBox(height: 4), Text(subtitle, style: const TextStyle(color: Colors.white70)),
   ])));
 
   Widget _metric(String title, String value, IconData icon, Color color) => Card(child: Padding(padding: const EdgeInsets.all(14), child: Row(children: [Icon(icon, color: color, size: 28), const SizedBox(width: 8), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(title, style: const TextStyle(color: Colors.white60)), Text(value, style: const TextStyle(fontSize: 21, fontWeight: FontWeight.w800))]))])));
@@ -1871,6 +1923,10 @@ class _ClubNageHomeState extends State<ClubNageHome> {
       Text(m.fullName, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w900)),
       const SizedBox(height: 8),
       Text('Groupes 1 et 2 : ${_groupNames(m.groups)}'),
+      Text('Date de naissance : ${m.dateOfBirth}${m.age == null ? '' : ' • ${m.age} ans'}'),
+      if (m.legalRepresentative.isNotEmpty) Text('Responsable légal : ${m.legalRepresentative}'),
+      if (m.phone.isNotEmpty) Text('Téléphone : ${m.phone}'),
+      if (m.email.isNotEmpty) Text('E-mail : ${m.email}'),
       Text('Statut du dossier : ${m.dossierStatus}'),
       Text('Badge NFC : ${assignedUids[m.id] ?? 'Non associé'}'),
       Text('QR : ${m.qrToken}'),
@@ -1879,6 +1935,13 @@ class _ClubNageHomeState extends State<ClubNageHome> {
       const SizedBox(height: 8),
       OutlinedButton.icon(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close), label: const Text('FERMER')),
     ]))));
+  }
+
+  String _sessionLabelForRecord(AttendanceRecord r) {
+    if (r.sessionId != null) {
+      for (final s in sessions) { if (s.id == r.sessionId) return s.label ?? _groupById(r.groupId).name; }
+    }
+    return _groupById(r.groupId).name;
   }
 
   String _groupNames(List<String> ids) => ids.map((id) => _groupById(id).name).join(' • ');
