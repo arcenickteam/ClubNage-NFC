@@ -48,7 +48,9 @@ class _ClubNageHomeState extends State<ClubNageHome> {
   bool scanning = false;
   AttendanceResult? result;
   String memberSearch = '';
+  String memberGroupFilter = 'all';
   final Map<String, String> assignedUids = {};
+  final Map<String, String> assignedQrTokens = {};
   final List<AttendanceRecord> records = [];
 
   // Historique des séances réellement ouvertes dans l'application.
@@ -187,11 +189,19 @@ class _ClubNageHomeState extends State<ClubNageHome> {
   Future<void> _loadAssignments() async {
     final prefs = await SharedPreferences.getInstance();
     final loaded = <String, String>{};
+    final loadedQr = <String, String>{};
     for (final m in members) {
       final uid = prefs.getString('uid_${m.id}');
       if (uid != null && uid.isNotEmpty) loaded[m.id] = uid;
+      final qr = prefs.getString('qr_${m.id}');
+      if (qr != null && qr.isNotEmpty) loadedQr[m.id] = qr;
     }
-    if (mounted) setState(() => assignedUids.addAll(loaded));
+    if (mounted) {
+      setState(() {
+        assignedUids.addAll(loaded);
+        assignedQrTokens.addAll(loadedQr);
+      });
+    }
   }
 
   Member? _memberForUid(String uid, {String? excludeId}) {
@@ -205,6 +215,28 @@ class _ClubNageHomeState extends State<ClubNageHome> {
       if (m.id == excludeId) continue;
       if (!assignedUids.containsKey(m.id) && m.nfcUid.toUpperCase() == wanted) return m;
     }
+    return null;
+  }
+
+  String _qrForMember(Member member) => assignedQrTokens[member.id] ?? member.qrToken;
+
+  Member? _memberForQr(String token, {String? excludeId}) {
+    final wanted = token.trim();
+    for (final m in members) {
+      if (m.id == excludeId) continue;
+      if (_qrForMember(m) == wanted) return m;
+    }
+    return null;
+  }
+
+  Future<String?> _saveQrAssignment(Member member, String token) async {
+    final normalized = token.trim();
+    if (normalized.isEmpty) return 'QR invalide.';
+    final other = _memberForQr(normalized, excludeId: member.id);
+    if (other != null) return 'Ce QR est déjà associé à ${other.fullName}.';
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('qr_${member.id}', normalized);
+    if (mounted) setState(() => assignedQrTokens[member.id] = normalized);
     return null;
   }
 
@@ -335,9 +367,7 @@ class _ClubNageHomeState extends State<ClubNageHome> {
     if (method == 'NFC') {
       member = _memberForUid(identifier);
     } else {
-      for (final m in members) {
-        if (m.qrToken == identifier) { member = m; break; }
-      }
+      member = _memberForQr(identifier);
     }
     if (member == null) {
       setState(() => result = AttendanceResult(status: AttendanceStatus.unknown, title: 'Licencié inconnu', message: '$method non associé à un licencié.', uid: identifier));
@@ -402,6 +432,102 @@ class _ClubNageHomeState extends State<ClubNageHome> {
     if (saved == true && mounted) {
       setState(() {});
     }
+  }
+
+  Future<void> _associateQr(Member member) async {
+    final code = await Navigator.of(context).push<String>(
+      MaterialPageRoute(builder: (_) => QrScannerReturnPage(title: 'Associer un QR')),
+    );
+    if (code == null || !mounted) return;
+    final message = await _saveQrAssignment(member, code);
+    if (!mounted) return;
+    if (message != null) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+      return;
+    }
+    setState(() {});
+    _memberSheet(member);
+  }
+
+  Future<void> _identifyBadge() async {
+    if (nfc.isRunning) {
+      await nfc.stop();
+    }
+    if (!mounted) return;
+    final method = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: panel,
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(18),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            const Text('Identifier un badge', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900)),
+            const SizedBox(height: 8),
+            const Text('Cette lecture ne crée aucune présence.', style: TextStyle(color: Colors.white60)),
+            const SizedBox(height: 16),
+            FilledButton.icon(
+              onPressed: () => Navigator.pop(sheetContext, 'NFC'),
+              icon: const Icon(Icons.nfc_rounded),
+              label: const Text('IDENTIFIER PAR NFC'),
+              style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(54)),
+            ),
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              onPressed: () => Navigator.pop(sheetContext, 'QR'),
+              icon: const Icon(Icons.qr_code_scanner_rounded),
+              label: const Text('IDENTIFIER PAR QR'),
+              style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(54)),
+            ),
+          ]),
+        ),
+      ),
+    );
+    if (!mounted || method == null) return;
+
+    if (method == 'QR') {
+      final code = await Navigator.of(context).push<String>(
+        MaterialPageRoute(builder: (_) => const QrScannerReturnPage(title: 'Identifier un badge')),
+      );
+      if (code == null || !mounted) return;
+      final member = _memberForQr(code);
+      if (member == null) {
+        _showUnknownBadge('QR');
+      } else {
+        _memberSheet(member);
+      }
+      return;
+    }
+
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => BadgeIdentificationPage(
+          nfc: nfc,
+          findMember: (uid) => _memberForUid(uid),
+          groupNames: _groupNames,
+          qrForMember: _qrForMember,
+          assignedUidForMember: (m) => assignedUids[m.id],
+        ),
+      ),
+    );
+  }
+
+  void _showUnknownBadge(String method) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: panel,
+      builder: (_) => const SafeArea(
+        child: Padding(
+          padding: EdgeInsets.all(24),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            Icon(Icons.help_outline_rounded, size: 58, color: orange),
+            SizedBox(height: 12),
+            Text('Badge non identifié', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900)),
+            SizedBox(height: 8),
+            Text('Ce badge n’est associé à aucun licencié.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white70)),
+          ]),
+        ),
+      ),
+    );
   }
 
   @override
@@ -804,6 +930,8 @@ class _ClubNageHomeState extends State<ClubNageHome> {
       FilledButton.icon(onPressed: () => setState(() => page = 1), icon: const Icon(Icons.nfc), label: const Text('SCANNER NFC'), style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(58))),
       const SizedBox(height: 9),
       OutlinedButton.icon(onPressed: sessionOpen ? _openQrScanner : null, icon: const Icon(Icons.qr_code_scanner), label: const Text('SCANNER QR'), style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(54))),
+      const SizedBox(height: 9),
+      OutlinedButton.icon(onPressed: _identifyBadge, icon: const Icon(Icons.manage_search_rounded), label: const Text('IDENTIFIER UN BADGE'), style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(54), foregroundColor: cyan)),
       const SizedBox(height: 16),
       _syncCard(),
     ]);
@@ -1250,9 +1378,23 @@ class _ClubNageHomeState extends State<ClubNageHome> {
   }
 
   Widget _membersPage() {
-    final filtered = members.where((m) => m.fullName.toLowerCase().contains(memberSearch.toLowerCase())).toList();
+    final filtered = members.where((m) {
+      final matchesText = m.fullName.toLowerCase().contains(memberSearch.toLowerCase());
+      final matchesGroup = memberGroupFilter == 'all' || m.groups.contains(memberGroupFilter);
+      return matchesText && matchesGroup;
+    }).toList();
     return ListView(padding: const EdgeInsets.all(16), children: [
       TextField(onChanged: (v) => setState(() => memberSearch = v), decoration: const InputDecoration(prefixIcon: Icon(Icons.search), hintText: 'Rechercher un licencié')),
+      const SizedBox(height: 10),
+      DropdownButtonFormField<String>(
+        initialValue: memberGroupFilter,
+        decoration: const InputDecoration(prefixIcon: Icon(Icons.groups_outlined), labelText: 'Filtrer par groupe'),
+        items: [
+          const DropdownMenuItem(value: 'all', child: Text('Tous les groupes')),
+          ...groups.map((g) => DropdownMenuItem(value: g.id, child: Text(g.name))),
+        ],
+        onChanged: (v) { if (v != null) setState(() => memberGroupFilter = v); },
+      ),
       const SizedBox(height: 12),
       ...filtered.map((m) => Card(child: ListTile(
         leading: CircleAvatar(child: Text(m.firstName.substring(0, 1))),
@@ -1929,9 +2071,11 @@ class _ClubNageHomeState extends State<ClubNageHome> {
       if (m.email.isNotEmpty) Text('E-mail : ${m.email}'),
       Text('Statut du dossier : ${m.dossierStatus}'),
       Text('Badge NFC : ${assignedUids[m.id] ?? 'Non associé'}'),
-      Text('QR : ${m.qrToken}'),
+      Text('QR : ${_qrForMember(m)}'),
       const SizedBox(height: 16),
-      FilledButton.icon(onPressed: () { Navigator.pop(context); _associate(m); }, icon: const Icon(Icons.nfc), label: const Text('SCANNER ET ASSOCIER LE BADGE'), style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(54))),
+      FilledButton.icon(onPressed: () { Navigator.pop(context); _associate(m); }, icon: const Icon(Icons.nfc), label: const Text('SCANNER ET ASSOCIER LE BADGE NFC'), style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(54))),
+      const SizedBox(height: 8),
+      OutlinedButton.icon(onPressed: () { Navigator.pop(context); _associateQr(m); }, icon: const Icon(Icons.qr_code_scanner_rounded), label: const Text('SCANNER ET ASSOCIER LE QR'), style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(54))),
       const SizedBox(height: 8),
       OutlinedButton.icon(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close), label: const Text('FERMER')),
     ]))));
@@ -2085,6 +2229,149 @@ class _BadgeAssociationPageState extends State<BadgeAssociationPage> {
       const SizedBox(height: 8),
       OutlinedButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('ANNULER')),
     ]))),
+  );
+}
+
+class BadgeIdentificationPage extends StatefulWidget {
+  final NfcService nfc;
+  final Member? Function(String uid) findMember;
+  final String Function(List<String> ids) groupNames;
+  final String Function(Member member) qrForMember;
+  final String? Function(Member member) assignedUidForMember;
+
+  const BadgeIdentificationPage({
+    super.key,
+    required this.nfc,
+    required this.findMember,
+    required this.groupNames,
+    required this.qrForMember,
+    required this.assignedUidForMember,
+  });
+
+  @override
+  State<BadgeIdentificationPage> createState() => _BadgeIdentificationPageState();
+}
+
+class _BadgeIdentificationPageState extends State<BadgeIdentificationPage> {
+  Member? member;
+  String? uid;
+  String? error;
+  bool waiting = true;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _start());
+  }
+
+  Future<void> _start() async {
+    if (!mounted) return;
+    setState(() { member = null; uid = null; error = null; waiting = true; });
+    await widget.nfc.scan(
+      onRead: (read) {
+        if (!mounted) return;
+        final found = widget.findMember(read.uid);
+        setState(() {
+          uid = read.uid;
+          member = found;
+          waiting = false;
+          error = found == null ? 'Ce badge n’est associé à aucun licencié.' : null;
+        });
+      },
+      onError: (message) {
+        if (!mounted) return;
+        setState(() { error = message; waiting = false; });
+      },
+    );
+  }
+
+  @override
+  void dispose() {
+    widget.nfc.stop();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final m = member;
+    return Scaffold(
+      appBar: AppBar(title: const Text('Identifier un badge')),
+      body: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.all(20),
+          children: [
+            if (waiting) ...[
+              const SizedBox(height: 70),
+              const Icon(Icons.contactless_rounded, size: 92, color: cyan),
+              const SizedBox(height: 20),
+              const Text('APPROCHEZ LE BADGE NFC', textAlign: TextAlign.center, style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900)),
+              const SizedBox(height: 8),
+              const Text('Cette lecture ne crée aucune présence.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white60)),
+            ] else if (m != null) ...[
+              Text(m.fullName, style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w900)),
+              const SizedBox(height: 14),
+              Text('Groupes 1 et 2 : ${widget.groupNames(m.groups)}', style: const TextStyle(fontSize: 17)),
+              Text('Date de naissance : ${m.dateOfBirth}${m.age == null ? '' : ' • ${m.age} ans'}', style: const TextStyle(fontSize: 17)),
+              if (m.legalRepresentative.isNotEmpty) Text('Responsable légal : ${m.legalRepresentative}', style: const TextStyle(fontSize: 17)),
+              if (m.phone.isNotEmpty) Text('Téléphone : ${m.phone}', style: const TextStyle(fontSize: 17)),
+              if (m.email.isNotEmpty) Text('E-mail : ${m.email}', style: const TextStyle(fontSize: 17)),
+              Text('Statut du dossier : ${m.dossierStatus}', style: const TextStyle(fontSize: 17)),
+              Text('Badge NFC : ${widget.assignedUidForMember(m) ?? 'Non associé'}', style: const TextStyle(fontSize: 17)),
+              Text('QR : ${widget.qrForMember(m)}', style: const TextStyle(fontSize: 17)),
+              const SizedBox(height: 20),
+              const Card(
+                child: ListTile(
+                  leading: Icon(Icons.verified_rounded, color: green),
+                  title: Text('Badge identifié', style: TextStyle(fontWeight: FontWeight.w800)),
+                  subtitle: Text('Aucune présence n’a été enregistrée.'),
+                ),
+              ),
+            ] else ...[
+              const SizedBox(height: 55),
+              const Icon(Icons.help_outline_rounded, size: 80, color: orange),
+              const SizedBox(height: 16),
+              const Text('BADGE NON IDENTIFIÉ', textAlign: TextAlign.center, style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900)),
+              const SizedBox(height: 8),
+              Text(error ?? 'Ce badge n’est associé à aucun licencié.', textAlign: TextAlign.center, style: const TextStyle(color: Colors.white70, fontSize: 16)),
+              if (uid != null) ...[
+                const SizedBox(height: 10),
+                Text('UID : $uid', textAlign: TextAlign.center, style: const TextStyle(color: Colors.white54)),
+              ],
+            ],
+            if (!waiting) ...[
+              const SizedBox(height: 18),
+              OutlinedButton.icon(onPressed: _start, icon: const Icon(Icons.refresh_rounded), label: const Text('IDENTIFIER UN AUTRE BADGE'), style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(54))),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class QrScannerReturnPage extends StatefulWidget {
+  final String title;
+  const QrScannerReturnPage({super.key, required this.title});
+  @override
+  State<QrScannerReturnPage> createState() => _QrScannerReturnPageState();
+}
+
+class _QrScannerReturnPageState extends State<QrScannerReturnPage> {
+  bool done = false;
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(title: Text(widget.title)),
+    body: MobileScanner(onDetect: (capture) {
+      if (done) return;
+      for (final barcode in capture.barcodes) {
+        final value = barcode.rawValue;
+        if (value != null && value.isNotEmpty) {
+          done = true;
+          Navigator.of(context).pop(value);
+          break;
+        }
+      }
+    }),
   );
 }
 
