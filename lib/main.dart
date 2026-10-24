@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'models.dart';
+import 'v7_import_screen.dart';
 import 'services/nfc_service.dart';
 
 const navy = Color(0xFF071A2B);
@@ -589,11 +590,11 @@ class _ClubNageHomeState extends State<ClubNageHome> {
           ],
         ),
         actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 14),
-            child: Icon(
-              Icons.cloud_done_outlined,
-              color: Colors.white.withValues(alpha: .72),
+          IconButton(
+            tooltip: 'V7 · Essais kDrive',
+            icon: const Icon(Icons.cloud_download_outlined),
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const V7ImportScreen()),
             ),
           ),
         ],
