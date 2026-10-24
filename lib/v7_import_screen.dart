@@ -22,7 +22,7 @@ class _V7ImportScreenState extends State<V7ImportScreen> {
     if (index >= row.length) return '';
     final v = row[index]?.value;
     if (v == null) return '';
-    if (v is TextCellValue) return v.value.trim();
+    if (v is TextCellValue) return v.value.toPlainText().trim();
     if (v is IntCellValue) return v.value.toString();
     if (v is DoubleCellValue) return v.value.toString();
     if (v is BoolCellValue) return v.value ? '1' : '0';
