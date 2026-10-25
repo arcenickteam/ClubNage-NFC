@@ -75,6 +75,15 @@ jobs:
       - name: Construire l'APK de test
         run: flutter build apk --release
 
+      - name: Diagnostic manifeste fusionné OAuth2
+        shell: bash
+        run: |
+          echo "===== MANIFESTES FUSIONNÉS ====="
+          find build/app/intermediates -type f -name AndroidManifest.xml | while read -r f; do
+            echo "===== $f ====="
+            grep -n -C 8 -E 'AuthorizationManagementActivity|RedirectUriReceiverActivity|MainActivity|appAuthRedirectScheme|taskAffinity|launchMode' "$f" || true
+          done
+
       - name: Publier l'APK
         uses: actions/upload-artifact@v4
         with:
