@@ -39,6 +39,16 @@ jobs:
           python3 tool/prepare_android.py
           cp -R tool/android_icons/. android/app/src/main/res/
 
+      - name: Diagnostic OAuth2 Android
+        shell: bash
+        run: |
+          echo "===== MANIFESTE ANDROID ====="
+          cat android/app/src/main/AndroidManifest.xml
+          echo "===== CONFIGURATION GRADLE ====="
+          grep -n -C 5 'appAuthRedirectScheme' android/app/build.gradle.kts || true
+          echo "===== CONFIGURATION APP AUTH ====="
+          grep -R -n -E 'AuthorizationManagementActivity|RedirectUriReceiverActivity|launchMode|taskAffinity' android/app/src/main 2>/dev/null || true
+
       - name: Vérifier et récupérer les dépendances
         run: |
           flutter --version
