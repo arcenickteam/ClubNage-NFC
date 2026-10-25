@@ -2,6 +2,7 @@ import 'dart:typed_data';
 import 'package:excel/excel.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'services/infomaniak_kdrive_service.dart';
 
 /// V7: consultation isolée des exports kDrive, sans écriture ni migration
 /// des associations NFC/QR de la V6.
@@ -17,6 +18,45 @@ class _V7ImportScreenState extends State<V7ImportScreen> {
   String status = 'Aucun fichier chargé';
   String filter = '';
   bool busy = false;
+  final kdrive = InfomaniakKdriveService();
+
+  Future<void> connectKdrive() async {
+    setState(() { busy = true; status = 'Connexion Infomaniak en cours…'; });
+    try {
+      await kdrive.connect();
+      if (!mounted) return;
+      setState(() => status = 'Connecté à Infomaniak. Vérification du dossier…');
+      final folder = await kdrive.verifyFolder();
+      if (!mounted) return;
+      setState(() => status = 'Dossier API confirmé : ${folder['name']}. Prêt à synchroniser.');
+    } catch (e) {
+      if (mounted) setState(() => status = 'Connexion / dossier : $e');
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
+  }
+
+  Future<void> synchronizeKdrive() async {
+    setState(() { busy = true; status = 'Téléchargement des fichiers V4…'; });
+    try {
+      final members = await kdrive.downloadWorkbook(InfomaniakKdriveService.membersName);
+      final schedule = await kdrive.downloadWorkbook(InfomaniakKdriveService.scheduleName);
+      // Validation complète avant modification de l'affichage consultatif.
+      final parsedPeople = parseMembers(Excel.decodeBytes(members));
+      final parsedSlots = parseSchedule(Excel.decodeBytes(schedule));
+      if (!mounted) return;
+      setState(() {
+        people = parsedPeople;
+        slots = parsedSlots;
+        status = 'kDrive : ${people.length} licenciés et ${slots.length} créneaux actualisés (lecture seule).';
+      });
+    } catch (e) {
+      if (mounted) setState(() => status = 'Synchronisation impossible : $e');
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
+  }
+
 
   String cell(List<Data?> row, int index) {
     if (index >= row.length) return '';
@@ -41,12 +81,8 @@ class _V7ImportScreenState extends State<V7ImportScreen> {
     return Excel.decodeBytes(bytes);
   }
 
-  Future<void> loadMembers() async {
-    setState(() => busy = true);
-    try {
-      final excel = await pickWorkbook();
-      if (excel == null) return;
-      final sheet = excel.tables['Licenciés'];
+  List<Map<String, String>> parseMembers(Excel excel) {
+    final sheet = excel.tables['Licenciés'];
       if (sheet == null || sheet.rows.length < 5) {
         throw const FormatException('Onglet « Licenciés » absent ou vide.');
       }
@@ -58,7 +94,7 @@ class _V7ImportScreenState extends State<V7ImportScreen> {
       if (id < 0 || nom < 0 || prenom < 0) {
         throw const FormatException('Colonnes identifiant / nom / prénom absentes.');
       }
-      final result = <Map<String, String>>[];
+    final result = <Map<String, String>>[];
       for (final row in sheet.rows.skip(4)) {
         if (cell(row, id).isEmpty) continue;
         final activeGroups = <String>[];
@@ -75,6 +111,15 @@ class _V7ImportScreenState extends State<V7ImportScreen> {
           'groupes': activeGroups.join(', '),
         });
       }
+    return result;
+  }
+
+  Future<void> loadMembers() async {
+    setState(() => busy = true);
+    try {
+      final excel = await pickWorkbook();
+      if (excel == null) return;
+      final result = parseMembers(excel);
       if (!mounted) return;
       setState(() { people = result; status = 'Base V4 : ${result.length} licenciés chargés en lecture seule'; });
     } catch (e) {
@@ -84,11 +129,7 @@ class _V7ImportScreenState extends State<V7ImportScreen> {
     }
   }
 
-  Future<void> loadSchedule() async {
-    setState(() => busy = true);
-    try {
-      final excel = await pickWorkbook();
-      if (excel == null) return;
+  List<Map<String, String>> parseSchedule(Excel excel) {
       final sheet = excel.tables['Planning référentiel'];
       if (sheet == null) throw const FormatException('Onglet « Planning référentiel » absent.');
       final result = <Map<String, String>>[];
@@ -100,6 +141,15 @@ class _V7ImportScreenState extends State<V7ImportScreen> {
           'fin': cell(row, 3), 'statut': cell(row, 4),
         });
       }
+    return result;
+  }
+
+  Future<void> loadSchedule() async {
+    setState(() => busy = true);
+    try {
+      final excel = await pickWorkbook();
+      if (excel == null) return;
+      final result = parseSchedule(excel);
       if (!mounted) return;
       setState(() { slots = result; status = 'Planning V4 : ${result.length} entrées chargées en lecture seule'; });
     } catch (e) {
@@ -115,9 +165,15 @@ class _V7ImportScreenState extends State<V7ImportScreen> {
     final visible = people.where((p) => '${p['nom']} ${p['prenom']} ${p['groupes']} ${p['id']}'
         .toLowerCase().contains(q)).toList();
     return Scaffold(
-      appBar: AppBar(title: const Text('V7 · Essais kDrive (lecture seule)')),
+      appBar: AppBar(title: const Text('V7 · kDrive (lecture seule)')),
       body: ListView(padding: const EdgeInsets.all(16), children: [
-        const Text('Sélectionnez les deux fichiers V4 téléchargés depuis kDrive. Aucune donnée n’est envoyée, aucun badge ni historique V6 n’est modifié.'),
+        const Text('Connexion directe à Infomaniak : lecture seule des deux fichiers V4. Aucun badge ni historique V6 n’est modifié.'),
+        const SizedBox(height: 12),
+        FilledButton.icon(onPressed: busy ? null : connectKdrive, icon: const Icon(Icons.login), label: const Text('Se connecter à Infomaniak')),
+        const SizedBox(height: 8),
+        FilledButton.icon(onPressed: busy || !kdrive.isConnected ? null : synchronizeKdrive, icon: const Icon(Icons.sync), label: const Text('Synchroniser les deux fichiers kDrive')),
+        const SizedBox(height: 12),
+        const Text('Dépannage : import manuel des fichiers XLSX'),
         const SizedBox(height: 12),
         FilledButton.icon(onPressed: busy ? null : loadMembers, icon: const Icon(Icons.people), label: const Text('Importer la base licenciés V4')),
         const SizedBox(height: 8),

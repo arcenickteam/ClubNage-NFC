@@ -4,11 +4,14 @@ manifest = Path('android/app/src/main/AndroidManifest.xml')
 text = manifest.read_text(encoding='utf-8')
 
 permission = '<uses-permission android:name="android.permission.NFC" />'
+internet = '<uses-permission android:name="android.permission.INTERNET" />'
 feature = '<uses-feature android:name="android.hardware.nfc" android:required="false" />'
 
 if permission not in text:
     text = text.replace('<manifest xmlns:android="http://schemas.android.com/apk/res/android">',
                         '<manifest xmlns:android="http://schemas.android.com/apk/res/android">\n    ' + permission)
+if internet not in text:
+    text = text.replace(permission, permission + '\n    ' + internet)
 if feature not in text:
     text = text.replace(permission, permission + '\n    ' + feature)
 
@@ -29,3 +32,24 @@ if icons_root.exists():
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(source, destination)
         print(f'Launcher icon: {destination}')
+
+# flutter_appauth / AppAuth : retour navigateur vers l'application Android.
+# Flutter crée build.gradle.kts sur les versions récentes.
+gradle = Path('android/app/build.gradle.kts')
+if gradle.exists():
+    config = gradle.read_text(encoding='utf-8')
+    marker = 'defaultConfig {'
+    placeholder = 'manifestPlaceholders["appAuthRedirectScheme"] = "fr.montchanin.clubnage"'
+    if placeholder not in config:
+        if marker not in config:
+            raise RuntimeError('Bloc defaultConfig introuvable pour la redirection OAuth2')
+        config = config.replace(marker, marker + '\n        ' + placeholder, 1)
+        gradle.write_text(config, encoding='utf-8')
+else:
+    gradle = Path('android/app/build.gradle')
+    if gradle.exists():
+        config = gradle.read_text(encoding='utf-8')
+        placeholder = "manifestPlaceholders += [appAuthRedirectScheme: 'fr.montchanin.clubnage']"
+        if placeholder not in config:
+            config = config.replace('defaultConfig {', 'defaultConfig {\n        ' + placeholder, 1)
+            gradle.write_text(config, encoding='utf-8')
