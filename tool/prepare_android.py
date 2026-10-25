@@ -53,3 +53,13 @@ else:
         if placeholder not in config:
             config = config.replace('defaultConfig {', 'defaultConfig {\n        ' + placeholder, 1)
             gradle.write_text(config, encoding='utf-8')
+
+
+# Correctif OAuth2 - taskAffinity
+# Conserver l'affinité Android par défaut pour MainActivity.
+manifest = Path("android/app/src/main/AndroidManifest.xml")
+if manifest.exists():
+    content = manifest.read_text(encoding="utf-8")
+    content = content.replace('android:taskAffinity=""', '')
+    manifest.write_text(content, encoding="utf-8")
+    print("Correctif OAuth2 taskAffinity appliqué.")
