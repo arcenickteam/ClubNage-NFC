@@ -33,10 +33,10 @@ class InfomaniakKdriveService {
         scopes: const ['drive'],
       ),
     );
-    if (response?.accessToken == null) {
+    if (response.accessToken == null) {
       throw StateError('Connexion annulée ou jeton non reçu.');
     }
-    _accessToken = response!.accessToken;
+    _accessToken = response.accessToken;
   }
 
   void disconnect() => _accessToken = null;
