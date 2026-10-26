@@ -30,7 +30,7 @@ class InfomaniakKdriveService {
           authorizationEndpoint: _authorizationEndpoint,
           tokenEndpoint: _tokenEndpoint,
         ),
-        scopes: const ['drive'],
+        scopes: const ['openid', 'profile'],
       ),
     );
     if (response.accessToken == null) {
