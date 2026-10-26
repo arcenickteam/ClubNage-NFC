@@ -161,7 +161,6 @@ class InfomaniakKdriveService {
   static List<String> zipEntryNames(Uint8List bytes) {
     final names = <String>[];
     int u16(int i) => bytes[i] | (bytes[i + 1] << 8);
-    int u32(int i) => u16(i) | (u16(i + 2) << 16);
     var i = 0;
     while (i + 46 <= bytes.length) {
       if (bytes[i] == 0x50 && bytes[i + 1] == 0x4b &&
