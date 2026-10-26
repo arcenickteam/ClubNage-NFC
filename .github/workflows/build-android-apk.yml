@@ -54,6 +54,7 @@ jobs:
           flutter --version
           flutter pub get
           flutter analyze
+          flutter test test/local_attendance_store_test.dart
 
       - name: Corriger le SDK Android du module OAuth
         run: |

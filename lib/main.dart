@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'models.dart';
 import 'v7_import_screen.dart';
 import 'services/nfc_service.dart';
+import 'services/local_attendance_store.dart';
 
 const navy = Color(0xFF071A2B);
 const panel = Color(0xFF0D263B);
@@ -53,6 +54,10 @@ class _ClubNageHomeState extends State<ClubNageHome> {
   final Map<String, String> assignedUids = {};
   final Map<String, String> assignedQrTokens = {};
   final List<AttendanceRecord> records = [];
+  final LocalAttendanceStore _attendanceStore = LocalAttendanceStore();
+  bool _attendanceLoaded = false;
+  String? _attendanceError;
+  Future<void> _pendingAttendanceSave = Future<void>.value();
 
   // Historique des séances réellement ouvertes dans l'application.
   final List<TrainingSession> sessions = [];
@@ -143,14 +148,17 @@ class _ClubNageHomeState extends State<ClubNageHome> {
   List<Member> _membersForGroups(List<String> ids)=>members.where((m)=>m.groups.any(ids.contains)).toList();
 
   void _openScheduledSession(Map<String,Object> slot){
+    if (!_attendanceLoaded || _attendanceError != null) return;
     if(sessionOpen){ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('Une séance est déjà ouverte.')));return;}
     if(!_slotCanOpen(slot)){ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('Ouverture possible 30 minutes avant le début.')));return;}
     final n=DateTime.now(),ids=_slotGroups(slot),exp=_membersForGroups(ids);
     final s=TrainingSession(id:'${slot['id']}-${n.millisecondsSinceEpoch}',groupId:ids.first,date:DateTime(n.year,n.month,n.day),openedAt:n,expectedMemberIds:List.unmodifiable(exp.map((m)=>m.id)),label:slot['label'] as String,startTime:_at(n,slot['start'] as String),endTime:_at(n,slot['end'] as String),eligibleGroupIds:List.unmodifiable(ids));
     setState((){sessions.add(s);activeSession=s;groupId=ids.first;sessionOpen=true;result=null;});
+    _saveAttendance();
   }
 
   Future<void> _openManualSessionDialog() async{
+    if (!_attendanceLoaded || _attendanceError != null) return;
     if(sessionOpen){ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('Fermez d’abord la séance active.')));return;}
     String type='Entraînement exceptionnel',selectedGroup=groupId;
     final ok=await showDialog<bool>(context:context,builder:(dc)=>StatefulBuilder(builder:(context,setLocal)=>AlertDialog(
@@ -173,6 +181,7 @@ class _ClubNageHomeState extends State<ClubNageHome> {
     final n=DateTime.now(),exp=members.where((m)=>m.groups.contains(selectedGroup)).toList();
     final s=TrainingSession(id:'manual-${n.millisecondsSinceEpoch}',groupId:selectedGroup,date:DateTime(n.year,n.month,n.day),openedAt:n,expectedMemberIds:List.unmodifiable(exp.map((m)=>m.id)),label:type,startTime:n,endTime:n,eligibleGroupIds:[selectedGroup],manualType:type,excludeFromStats:type=='Test badge');
     setState((){sessions.add(s);activeSession=s;groupId=selectedGroup;sessionOpen=true;result=null;});
+    _saveAttendance();
   }
 
   void _autoCloseExpiredSessionIfNeeded(){
@@ -180,11 +189,51 @@ class _ClubNageHomeState extends State<ClubNageHome> {
     if(DateTime.now().isBefore(s.endTime!.add(const Duration(hours:4))))return;
     final i=sessions.indexWhere((x)=>x.id==s.id),closed=s.close(DateTime.now());
     setState((){if(i>=0)sessions[i]=closed;activeSession=null;sessionOpen=false;result=null;});
+    _saveAttendance();
   }
   @override
   void initState() {
     super.initState();
     _loadAssignments();
+    _restoreAttendance();
+  }
+
+  Future<void> _restoreAttendance() async {
+    try {
+      final snapshot = await _attendanceStore.load();
+      if (!mounted) return;
+      setState(() {
+        sessions.addAll(snapshot.sessions);
+        records.addAll(snapshot.records);
+        activeSession = snapshot.activeSessionId == null ? null :
+            sessions.where((s) => s.id == snapshot.activeSessionId && s.isOpen).firstOrNull;
+        sessionOpen = activeSession != null;
+        if (activeSession != null) groupId = activeSession!.groupId;
+        _attendanceLoaded = true;
+      });
+      _autoCloseExpiredSessionIfNeeded();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _attendanceError = 'Chargement des présences impossible : $e';
+        _attendanceLoaded = true;
+      });
+    }
+  }
+
+  void _saveAttendance() {
+    if (!_attendanceLoaded || _attendanceError != null) return;
+    final snapshot = AttendanceSnapshot(
+      sessions: List<TrainingSession>.of(sessions),
+      records: List<AttendanceRecord>.of(records),
+      activeSessionId: activeSession?.id,
+    );
+    _pendingAttendanceSave = _pendingAttendanceSave.then((_) async {
+      await _attendanceStore.save(snapshot);
+    }).catchError((Object e) {
+      if (mounted) setState(() => _attendanceError =
+          'Sauvegarde des présences impossible : $e');
+    });
   }
 
   Future<void> _loadAssignments() async {
@@ -287,7 +336,7 @@ class _ClubNageHomeState extends State<ClubNageHome> {
         result = null;
       });
     }
-
+    _saveAttendance();
   }
 
   Future<void> _go(int index) async {
@@ -349,6 +398,7 @@ class _ClubNageHomeState extends State<ClubNageHome> {
   }
 
   void _processIdentifier(String identifier, String method) {
+    if (!_attendanceLoaded || _attendanceError != null) return;
     _autoCloseExpiredSessionIfNeeded();
     if (!sessionOpen ||
         activeSession == null ||
@@ -397,6 +447,7 @@ class _ClubNageHomeState extends State<ClubNageHome> {
       ));
       result = AttendanceResult(status: status, title: status == AttendanceStatus.late ? 'Retard enregistré' : 'Présent', message: member.fullName, member: member, uid: identifier);
     });
+    _saveAttendance();
   }
 
   Future<void> _openQrScanner() async {
@@ -533,6 +584,16 @@ class _ClubNageHomeState extends State<ClubNageHome> {
 
   @override
   Widget build(BuildContext context) {
+    if (!_attendanceLoaded) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+    if (_attendanceError != null) {
+      return Scaffold(body: Center(child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Text('$_attendanceError\n\nAucune donnée existante n’a été effacée.\nNe désinstallez pas l’application.',
+            textAlign: TextAlign.center),
+      )));
+    }
     final pages = [
       _homePage(),
       _scannerPage(),
