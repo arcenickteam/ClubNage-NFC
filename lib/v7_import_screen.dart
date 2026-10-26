@@ -111,21 +111,48 @@ class _V7ImportScreenState extends State<V7ImportScreen> {
   }
 
   Future<void> synchronizeKdrive() async {
-    setState(() { busy = true; status = 'Téléchargement des fichiers V4…'; });
+    setState(() { busy = true; status = 'Début du diagnostic kDrive V7.4…'; });
+    String step = 'initialisation';
+    void progress(String message) {
+      step = message;
+      if (mounted) setState(() => status = 'Diagnostic kDrive : $message');
+    }
     try {
-      final members = await kdrive.downloadWorkbook(InfomaniakKdriveService.membersName);
-      final schedule = await kdrive.downloadWorkbook(InfomaniakKdriveService.scheduleName);
-      // Validation complète avant modification de l'affichage consultatif.
-      final parsedPeople = parseMembers(Excel.decodeBytes(members));
-      final parsedSlots = parseSchedule(Excel.decodeBytes(schedule));
+      progress('Base licenciés : vérification et téléchargement');
+      final members = await kdrive.downloadWorkbook(
+        InfomaniakKdriveService.membersName,
+        onProgress: (s) => progress('Base licenciés : $s'),
+      );
+      progress('Base licenciés : décodage Excel');
+      late final List<Map<String, String>> parsedPeople;
+      try {
+        parsedPeople = parseMembers(Excel.decodeBytes(members));
+      } catch (e) {
+        throw FormatException('Décodage base licenciés : $e');
+      }
+      progress('Planning : vérification et téléchargement');
+      final schedule = await kdrive.downloadWorkbook(
+        InfomaniakKdriveService.scheduleName,
+        onProgress: (s) => progress('Planning : $s'),
+      );
+      progress('Planning : décodage Excel');
+      late final List<Map<String, String>> parsedSlots;
+      try {
+        parsedSlots = parseSchedule(Excel.decodeBytes(schedule));
+      } catch (e) {
+        throw FormatException('Décodage planning : $e');
+      }
       if (!mounted) return;
       setState(() {
         people = parsedPeople;
         slots = parsedSlots;
-        status = 'kDrive : ${people.length} licenciés et ${slots.length} créneaux actualisés (lecture seule).';
+        status = 'kDrive : ${people.length} licenciés et ${slots.length} '
+            'créneaux actualisés (lecture seule).';
       });
     } catch (e) {
-      if (mounted) setState(() => status = 'Synchronisation impossible : $e');
+      if (mounted) {
+        setState(() => status = 'Échec à l’étape « $step » : $e');
+      }
     } finally {
       if (mounted) setState(() => busy = false);
     }
@@ -241,7 +268,7 @@ class _V7ImportScreenState extends State<V7ImportScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text('V7 · kDrive (lecture seule)')),
       body: ListView(padding: const EdgeInsets.all(16), children: [
-        const Text('V7.2 : accès kDrive par jeton API stocké de manière sécurisée sur cet appareil. Lecture seule des deux fichiers V4. Les badges et présences restent inchangés.'),
+        const Text('V7.4 : diagnostic du téléchargement kDrive par jeton API stocké de manière sécurisée sur cet appareil. Lecture seule des deux fichiers V4. Les badges et présences restent inchangés.'),
         const SizedBox(height: 12),
         FilledButton.icon(onPressed: busy ? null : configureApiToken, icon: const Icon(Icons.key), label: const Text('Configurer le jeton API kDrive')),
         const SizedBox(height: 8),
