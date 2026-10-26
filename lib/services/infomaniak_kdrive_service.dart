@@ -112,14 +112,48 @@ class InfomaniakKdriveService {
     return folder;
   }
 
+  /// Recherche d'abord le nom officiel du classeur, puis les variantes
+  /// courantes ajoutées lors d'un doublon. Le suffixe (1) observé dans
+  /// les Téléchargements macOS ne signifie PAS qu'il existe sur kDrive.
+  /// La variante n'est essayée que si l'API confirme une absence (404).
   Future<int> _findFileId(String name) async {
-    final result = await _jsonGet(Uri.https('api.infomaniak.com',
-        '/3/drive/$driveId/files/$folderCandidateId/name', {'name': name}));
-    final data = result['data'];
-    if (data is! Map<String, dynamic> || data['name'] != name || data['id'] is! num) {
-      throw StateError('Fichier introuvable ou nom différent : $name');
+    final dot = name.lastIndexOf('.');
+    final variants = <String>[
+      name,
+      if (dot > 0) '${name.substring(0, dot)}(1)${name.substring(dot)}',
+      if (dot > 0) '${name.substring(0, dot)} (1)${name.substring(dot)}',
+    ];
+    for (final candidate in variants) {
+      final url = Uri.https('api.infomaniak.com',
+          '/3/drive/$driveId/files/$folderCandidateId/name',
+          {'name': candidate});
+      final token = _accessToken;
+      if (token == null) {
+        throw StateError('Connectez-vous d’abord à Infomaniak.');
+      }
+      final response = await http.get(url, headers: {
+        'Authorization': 'Bearer $token',
+        'Accept': 'application/json',
+      }).timeout(const Duration(seconds: 30));
+      if (response.statusCode == 404) continue;
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw StateError('Recherche kDrive : HTTP ${response.statusCode} '
+            'pour $candidate. Vérifiez le jeton et les droits.');
+      }
+      final decoded = jsonDecode(utf8.decode(response.bodyBytes));
+      if (decoded is! Map<String, dynamic> ||
+          decoded['result'] != 'success') {
+        throw StateError('Réponse inattendue lors de la recherche de $candidate.');
+      }
+      final data = decoded['data'];
+      if (data is Map<String, dynamic> &&
+          data['name'] == candidate && data['id'] is num) {
+        return (data['id'] as num).toInt();
+      }
+      throw StateError('Réponse kDrive sans identifiant valide pour $candidate.');
     }
-    return (data['id'] as num).toInt();
+    throw StateError('Classeur absent du dossier kDrive : $name '
+        '(noms officiels et variantes (1) vérifiés).');
   }
 
   Future<Uint8List> downloadWorkbook(String name) async {
