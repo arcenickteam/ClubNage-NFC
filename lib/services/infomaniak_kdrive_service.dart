@@ -2,10 +2,11 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter_appauth/flutter_appauth.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 
-/// Connexion OAuth2 mobile (PKCE via AppAuth), sans secret embarqué.
-/// Les appels kDrive sont exclusivement des GET (lecture seule).
+/// Accès kDrive en lecture seule. Jeton API saisi sur le téléphone et
+/// conservé dans le stockage sécurisé Android, jamais embarqué dans l’APK.
 class InfomaniakKdriveService {
   static const clientId = 'b26bf66d-f586-43fb-b70c-120b1f98c58c';
   static const redirectUri = 'fr.montchanin.clubnage:/oauth2redirect';
@@ -17,7 +18,41 @@ class InfomaniakKdriveService {
   static const _authorizationEndpoint = 'https://login.infomaniak.com/authorize';
   static const _tokenEndpoint = 'https://login.infomaniak.com/token';
   final FlutterAppAuth _auth = const FlutterAppAuth();
+  static const _secureStorage = FlutterSecureStorage();
+  static const _apiTokenKey = 'clubnage_kdrive_api_token_v72';
   String? _accessToken;
+
+  /// Le jeton est lu uniquement dans le stockage chiffré du téléphone.
+  Future<bool> restoreSavedApiToken() async {
+    final token = await _secureStorage.read(key: _apiTokenKey);
+    if (token == null || token.isEmpty) return false;
+    _accessToken = token;
+    return true;
+  }
+
+  /// Valide le jeton AVANT de le sauvegarder. Aucun secret dans l'APK.
+  Future<Map<String, dynamic>> connectWithApiToken(String input) async {
+    final token = input.trim();
+    if (token.isEmpty || token.contains(RegExp(r'\s'))) {
+      throw ArgumentError('Jeton API vide ou invalide.');
+    }
+    final previous = _accessToken;
+    _accessToken = token;
+    try {
+      final folder = await verifyFolder();
+      await _secureStorage.write(key: _apiTokenKey, value: token);
+      return folder;
+    } catch (_) {
+      _accessToken = previous;
+      rethrow;
+    }
+  }
+
+  Future<void> forgetApiToken() async {
+    await _secureStorage.delete(key: _apiTokenKey);
+    _accessToken = null;
+  }
+
 
   bool get isConnected => _accessToken != null;
 
@@ -50,7 +85,7 @@ class InfomaniakKdriveService {
     }).timeout(const Duration(seconds: 30));
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw StateError('API kDrive : HTTP ${response.statusCode} sur ${url.path}. '
-          'Vérifier les droits du dossier partagé et le scope drive.');
+          'Vérifier le jeton API et ses autorisations kDrive.');
     }
     return response;
   }

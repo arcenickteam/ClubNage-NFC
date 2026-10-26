@@ -20,6 +20,80 @@ class _V7ImportScreenState extends State<V7ImportScreen> {
   bool busy = false;
   final kdrive = InfomaniakKdriveService();
 
+  @override
+  void initState() {
+    super.initState();
+    _restoreKdrive();
+  }
+
+  Future<void> _restoreKdrive() async {
+    try {
+      final restored = await kdrive.restoreSavedApiToken();
+      if (mounted && restored) {
+        setState(() => status = 'Jeton kDrive retrouvé sur ce téléphone. Vous pouvez synchroniser.');
+      }
+    } catch (_) {
+      if (mounted) setState(() => status = 'Stockage sécurisé indisponible sur cet appareil.');
+    }
+  }
+
+  Future<void> configureApiToken() async {
+    final controller = TextEditingController();
+    try {
+      final token = await showDialog<String>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Connexion kDrive sécurisée'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Saisissez un jeton API dédié à ClubNage, limité à kDrive. Il restera dans le stockage sécurisé du téléphone.'),
+              const SizedBox(height: 12),
+              TextField(
+                controller: controller,
+                obscureText: true,
+                autocorrect: false,
+                enableSuggestions: false,
+                keyboardType: TextInputType.visiblePassword,
+                decoration: const InputDecoration(labelText: 'Jeton API Infomaniak'),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Annuler')),
+            FilledButton(onPressed: () => Navigator.pop(dialogContext, controller.text), child: const Text('Tester et enregistrer')),
+          ],
+        ),
+      );
+      if (token == null || token.trim().isEmpty || !mounted) return;
+      setState(() { busy = true; status = 'Vérification des droits kDrive…'; });
+      try {
+        final folder = await kdrive.connectWithApiToken(token);
+        if (mounted) setState(() => status = 'Connexion validée : ${folder['name']}. Jeton enregistré de façon sécurisée.');
+      } catch (e) {
+        if (mounted) setState(() => status = 'Connexion refusée : $e');
+      } finally {
+        if (mounted) setState(() => busy = false);
+      }
+    } finally {
+      controller.dispose();
+    }
+  }
+
+  Future<void> forgetApiToken() async {
+    setState(() => busy = true);
+    try {
+      await kdrive.forgetApiToken();
+      if (mounted) setState(() => status = 'Jeton kDrive effacé de ce téléphone.');
+    } catch (e) {
+      if (mounted) setState(() => status = 'Impossible de supprimer le jeton : $e');
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
+  }
+
+
   Future<void> connectKdrive() async {
     setState(() { busy = true; status = 'Connexion Infomaniak en cours…'; });
     try {
@@ -167,9 +241,11 @@ class _V7ImportScreenState extends State<V7ImportScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text('V7 · kDrive (lecture seule)')),
       body: ListView(padding: const EdgeInsets.all(16), children: [
-        const Text('Connexion directe à Infomaniak : lecture seule des deux fichiers V4. Aucun badge ni historique V6 n’est modifié.'),
+        const Text('V7.2 : accès kDrive par jeton API stocké de manière sécurisée sur cet appareil. Lecture seule des deux fichiers V4. Les badges et présences restent inchangés.'),
         const SizedBox(height: 12),
-        FilledButton.icon(onPressed: busy ? null : connectKdrive, icon: const Icon(Icons.login), label: const Text('Se connecter à Infomaniak')),
+        FilledButton.icon(onPressed: busy ? null : configureApiToken, icon: const Icon(Icons.key), label: const Text('Configurer le jeton API kDrive')),
+        const SizedBox(height: 8),
+        OutlinedButton.icon(onPressed: busy ? null : forgetApiToken, icon: const Icon(Icons.logout), label: const Text('Oublier le jeton sur ce téléphone')),
         const SizedBox(height: 8),
         FilledButton.icon(onPressed: busy || !kdrive.isConnected ? null : synchronizeKdrive, icon: const Icon(Icons.sync), label: const Text('Synchroniser les deux fichiers kDrive')),
         const SizedBox(height: 12),
