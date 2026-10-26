@@ -4,7 +4,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'models.dart';
 import 'v7_import_screen.dart';
 import 'services/nfc_service.dart';
-import 'services/local_attendance_store.dart';
 
 const navy = Color(0xFF071A2B);
 const panel = Color(0xFF0D263B);
@@ -54,9 +53,6 @@ class _ClubNageHomeState extends State<ClubNageHome> {
   final Map<String, String> assignedUids = {};
   final Map<String, String> assignedQrTokens = {};
   final List<AttendanceRecord> records = [];
-  final LocalAttendanceStore _attendanceStore = LocalAttendanceStore();
-  Future<void> _pendingAttendanceSave = Future<void>.value();
-  bool _attendanceLoaded = false;
 
   // Historique des séances réellement ouvertes dans l'application.
   final List<TrainingSession> sessions = [];
@@ -152,7 +148,6 @@ class _ClubNageHomeState extends State<ClubNageHome> {
     final n=DateTime.now(),ids=_slotGroups(slot),exp=_membersForGroups(ids);
     final s=TrainingSession(id:'${slot['id']}-${n.millisecondsSinceEpoch}',groupId:ids.first,date:DateTime(n.year,n.month,n.day),openedAt:n,expectedMemberIds:List.unmodifiable(exp.map((m)=>m.id)),label:slot['label'] as String,startTime:_at(n,slot['start'] as String),endTime:_at(n,slot['end'] as String),eligibleGroupIds:List.unmodifiable(ids));
     setState((){sessions.add(s);activeSession=s;groupId=ids.first;sessionOpen=true;result=null;});
-    _persistAttendance();
   }
 
   Future<void> _openManualSessionDialog() async{
@@ -178,7 +173,6 @@ class _ClubNageHomeState extends State<ClubNageHome> {
     final n=DateTime.now(),exp=members.where((m)=>m.groups.contains(selectedGroup)).toList();
     final s=TrainingSession(id:'manual-${n.millisecondsSinceEpoch}',groupId:selectedGroup,date:DateTime(n.year,n.month,n.day),openedAt:n,expectedMemberIds:List.unmodifiable(exp.map((m)=>m.id)),label:type,startTime:n,endTime:n,eligibleGroupIds:[selectedGroup],manualType:type,excludeFromStats:type=='Test badge');
     setState((){sessions.add(s);activeSession=s;groupId=selectedGroup;sessionOpen=true;result=null;});
-    _persistAttendance();
   }
 
   void _autoCloseExpiredSessionIfNeeded(){
@@ -186,58 +180,11 @@ class _ClubNageHomeState extends State<ClubNageHome> {
     if(DateTime.now().isBefore(s.endTime!.add(const Duration(hours:4))))return;
     final i=sessions.indexWhere((x)=>x.id==s.id),closed=s.close(DateTime.now());
     setState((){if(i>=0)sessions[i]=closed;activeSession=null;sessionOpen=false;result=null;});
-    _persistAttendance();
   }
   @override
   void initState() {
     super.initState();
     _loadAssignments();
-    _loadAttendance();
-  }
-
-  Future<void> _loadAttendance() async {
-    try {
-      final snapshot = await _attendanceStore.load();
-      if (!mounted) return;
-      setState(() {
-        sessions.addAll(snapshot.sessions);
-        records.addAll(snapshot.records);
-        // Une séance en cours peut être reprise après fermeture de l'application.
-        final open = sessions.where((s) => s.isOpen).toList();
-        if (open.isNotEmpty) {
-          activeSession = open.last;
-          groupId = open.last.groupId;
-          sessionOpen = true;
-        }
-        _attendanceLoaded = true;
-      });
-      _autoCloseExpiredSessionIfNeeded();
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('Historique local illisible : $e. Aucun historique effacé.'),
-        duration: const Duration(seconds: 10),
-      ));
-    }
-  }
-
-  void _persistAttendance() {
-    if (!_attendanceLoaded) return;
-    final sessionsSnapshot = List<TrainingSession>.of(sessions);
-    final recordsSnapshot = List<AttendanceRecord>.of(records);
-    // Sérialiser les écritures pour éviter qu'un ancien état écrase le dernier.
-    _pendingAttendanceSave = _pendingAttendanceSave.catchError((Object _) {}).then((_) async {
-      try {
-        await _attendanceStore.save(sessionsSnapshot, recordsSnapshot);
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text('ATTENTION : pointages non sauvegardés : $e'),
-            duration: const Duration(seconds: 10),
-          ));
-        }
-      }
-    });
   }
 
   Future<void> _loadAssignments() async {
@@ -340,7 +287,6 @@ class _ClubNageHomeState extends State<ClubNageHome> {
         result = null;
       });
     }
-    _persistAttendance();
 
   }
 
@@ -451,7 +397,6 @@ class _ClubNageHomeState extends State<ClubNageHome> {
       ));
       result = AttendanceResult(status: status, title: status == AttendanceStatus.late ? 'Retard enregistré' : 'Présent', message: member.fullName, member: member, uid: identifier);
     });
-    _persistAttendance();
   }
 
   Future<void> _openQrScanner() async {
