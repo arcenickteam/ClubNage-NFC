@@ -224,6 +224,12 @@ class _V7ImportScreenState extends State<V7ImportScreen> {
           'session1': col('Session 1') >= 0 ? cell(row, col('Session 1')) : '',
           'session2': col('Session 2') >= 0 ? cell(row, col('Session 2')) : '',
           'niveau': col('Niveau') >= 0 ? cell(row, col('Niveau')) : '',
+          'dateNaissance': col('Date naissance') >= 0 ? cell(row, col('Date naissance')) : '',
+          'ville': col('Ville') >= 0 ? cell(row, col('Ville')) : '',
+          'telephone': col('Téléphone licencié') >= 0 ? cell(row, col('Téléphone licencié')) : '',
+          'telephoneTuteur': col('Téléphone responsable légal') >= 0 ? cell(row, col('Téléphone responsable légal')) : '',
+          'representantLegal': col('Représentant légal') >= 0 ? cell(row, col('Représentant légal')) : '',
+          'statutDossier': col('Statut dossier') >= 0 ? cell(row, col('Statut dossier')) : '',
           'groupes': activeGroups.join(', '),
         });
       }

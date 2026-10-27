@@ -2167,12 +2167,7 @@ class _ClubNageHomeState extends State<ClubNageHome> {
     showModalBottomSheet(context: context, isScrollControlled: true, builder: (_) => SafeArea(child: Padding(padding: const EdgeInsets.all(20), child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       Text(m.fullName, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w900)),
       const SizedBox(height: 8),
-      Text('Groupes 1 et 2 : ${_groupNames(m.groups)}'),
-      Text('Date de naissance : ${m.dateOfBirth}${m.age == null ? '' : ' • ${m.age} ans'}'),
-      if (m.legalRepresentative.isNotEmpty) Text('Responsable légal : ${m.legalRepresentative}'),
-      if (m.phone.isNotEmpty) Text('Téléphone : ${m.phone}'),
-      if (m.email.isNotEmpty) Text('E-mail : ${m.email}'),
-      Text('Statut du dossier : ${m.dossierStatus}'),
+      MemberInfoDetails(member: m),
       Text('Badge NFC : ${assignedUids[m.id] ?? 'Non associé'}'),
       Text('QR : ${_qrForMember(m)}'),
       const SizedBox(height: 16),
@@ -2413,12 +2408,7 @@ class _BadgeIdentificationPageState extends State<BadgeIdentificationPage> {
             ] else if (m != null) ...[
               Text(m.fullName, style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w900)),
               const SizedBox(height: 14),
-              Text('Groupes 1 et 2 : ${widget.groupNames(m.groups)}', style: const TextStyle(fontSize: 17)),
-              Text('Date de naissance : ${m.dateOfBirth}${m.age == null ? '' : ' • ${m.age} ans'}', style: const TextStyle(fontSize: 17)),
-              if (m.legalRepresentative.isNotEmpty) Text('Responsable légal : ${m.legalRepresentative}', style: const TextStyle(fontSize: 17)),
-              if (m.phone.isNotEmpty) Text('Téléphone : ${m.phone}', style: const TextStyle(fontSize: 17)),
-              if (m.email.isNotEmpty) Text('E-mail : ${m.email}', style: const TextStyle(fontSize: 17)),
-              Text('Statut du dossier : ${m.dossierStatus}', style: const TextStyle(fontSize: 17)),
+              MemberInfoDetails(member: m),
               Text('Badge NFC : ${widget.assignedUidForMember(m) ?? 'Non associé'}', style: const TextStyle(fontSize: 17)),
               Text('QR : ${widget.qrForMember(m)}', style: const TextStyle(fontSize: 17)),
               const SizedBox(height: 20),
@@ -2498,4 +2488,49 @@ class _QrScannerPageState extends State<QrScannerPage> {
       }
     }),
   );
+}
+
+
+/// Informations administratives issues du fichier licenciés V4.
+/// Le contrôle d'un badge ne crée aucune présence.
+class MemberInfoDetails extends StatelessWidget {
+  final Member member;
+  const MemberInfoDetails({super.key, required this.member});
+
+  @override
+  Widget build(BuildContext context) {
+    final status = member.dossierStatus.trim().toLowerCase();
+    final isConforme = status == 'conforme';
+    final isNonConforme = status == 'non conforme';
+    final color = isConforme ? green : (isNonConforme ? Colors.redAccent : Colors.white70);
+    String value(String text) => text.trim().isEmpty ? 'Non renseigné' : text.trim();
+    final minor = member.age == null || member.age! < 18;
+    final birth = member.dateOfBirth.trim();
+    final displayBirth = RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(birth)
+        ? '${birth.substring(8, 10)}/${birth.substring(5, 7)}/${birth.substring(0, 4)}'
+        : value(birth);
+    Widget field(String label, String text) => Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Text('$label : ${value(text)}', style: const TextStyle(fontSize: 16)),
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        field('Nom', member.lastName),
+        field('Prénom', member.firstName),
+        field('Catégorie', member.category),
+        field('Session 1', member.session1),
+        field('Niveau', member.level),
+        field('Date de naissance', displayBirth),
+        field('Ville', member.city),
+        field('Téléphone', member.phone),
+        if (minor) field('Téléphone tuteur', member.guardianPhone),
+        Padding(
+          padding: const EdgeInsets.only(top: 4, bottom: 8),
+          child: Text('Validation du dossier : ${value(member.dossierStatus)}',
+            style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: color)),
+        ),
+      ],
+    );
+  }
 }

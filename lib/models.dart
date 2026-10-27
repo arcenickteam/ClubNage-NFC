@@ -10,6 +10,11 @@ class Member {
   final String phone;
   final String dateOfBirth;
   final String legalRepresentative;
+  final String category;
+  final String session1;
+  final String level;
+  final String city;
+  final String guardianPhone;
 
   const Member({
     required this.id,
@@ -23,12 +28,25 @@ class Member {
     this.phone = '',
     this.dateOfBirth = '',
     this.legalRepresentative = '',
+    this.category = '',
+    this.session1 = '',
+    this.level = '',
+    this.city = '',
+    this.guardianPhone = '',
   });
 
   String get fullName => '$firstName $lastName';
 
   int? get age {
-    final p = dateOfBirth.split('/');
+    final normalized = dateOfBirth.trim();
+    final iso = DateTime.tryParse(normalized);
+    final p = normalized.split('/');
+    if (iso != null && p.length != 3) {
+      final now = DateTime.now();
+      var years = now.year - iso.year;
+      if (now.month < iso.month || (now.month == iso.month && now.day < iso.day)) years--;
+      return years;
+    }
     if (p.length != 3) return null;
     final birth = DateTime.tryParse('${p[2]}-${p[1].padLeft(2, '0')}-${p[0].padLeft(2, '0')}');
     if (birth == null) return null;

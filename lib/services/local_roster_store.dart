@@ -24,6 +24,14 @@ class LocalRosterStore {
         groups: List<String>.from(item['groups'] as List),
         nfcUid: '', qrToken: '',
         dossierStatus: item['dossierStatus'] as String? ?? 'Importé',
+        category: item['category'] as String? ?? '',
+        session1: item['session1'] as String? ?? '',
+        level: item['level'] as String? ?? '',
+        dateOfBirth: item['dateOfBirth'] as String? ?? '',
+        city: item['city'] as String? ?? '',
+        phone: item['phone'] as String? ?? '',
+        guardianPhone: item['guardianPhone'] as String? ?? '',
+        legalRepresentative: item['legalRepresentative'] as String? ?? '',
       ));
     }
     return result;
@@ -44,7 +52,15 @@ class LocalRosterStore {
         'id': id, 'firstName': first, 'lastName': last,
         'groups': (row['groupes'] ?? '').split(',').map((s) => s.trim())
             .where((s) => s.isNotEmpty).toList(),
-        'dossierStatus': 'Importé',
+        'dossierStatus': (row['statutDossier'] ?? '').trim(),
+        'category': row['categorie'] ?? '',
+        'session1': row['session1'] ?? '',
+        'level': row['niveau'] ?? '',
+        'dateOfBirth': row['dateNaissance'] ?? '',
+        'city': row['ville'] ?? '',
+        'phone': row['telephone'] ?? '',
+        'guardianPhone': row['telephoneTuteur'] ?? '',
+        'legalRepresentative': row['representantLegal'] ?? '',
       });
     }
     final prefs = await SharedPreferences.getInstance();
