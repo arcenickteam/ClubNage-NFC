@@ -6,6 +6,7 @@ import 'v7_import_screen.dart';
 import 'services/nfc_service.dart';
 import 'services/local_attendance_store.dart';
 import 'services/local_roster_store.dart';
+import 'services/group_eligibility.dart';
 
 const navy = Color(0xFF071A2B);
 const panel = Color(0xFF0D263B);
@@ -178,7 +179,7 @@ class _ClubNageHomeState extends State<ClubNageHome> {
   List<Map<String,Object>> get _todaySlots => _weeklySlots.where((s)=>s['weekday']==DateTime.now().weekday).toList();
   List<String> _slotGroups(Map<String,Object> s)=>List<String>.from(s['groups'] as List);
   bool _slotCanOpen(Map<String,Object> s){final n=DateTime.now(),st=_at(n,s['start'] as String),en=_at(n,s['end'] as String);return !n.isBefore(st.subtract(const Duration(minutes:30)))&&n.isBefore(en.add(const Duration(hours:4)));}
-  List<Member> _membersForGroups(List<String> ids)=>members.where((m)=>m.groups.any(ids.contains)).toList();
+  List<Member> _membersForGroups(List<String> ids)=>members.where((m)=>GroupEligibility.anyMatch(m.groups, ids)).toList();
 
   void _openScheduledSession(Map<String,Object> slot){
     if (!_attendanceLoaded || _attendanceError != null) return;
@@ -211,7 +212,7 @@ class _ClubNageHomeState extends State<ClubNageHome> {
       actions:[TextButton(onPressed:()=>Navigator.pop(dc,false),child:const Text('ANNULER')),FilledButton(onPressed:()=>Navigator.pop(dc,true),child:const Text('OUVRIR'))],
     )));
     if(ok!=true||!mounted)return;
-    final n=DateTime.now(),exp=members.where((m)=>m.groups.contains(selectedGroup)).toList();
+    final n=DateTime.now(),exp=members.where((m)=>GroupEligibility.anyMatch(m.groups, [selectedGroup])).toList();
     final s=TrainingSession(id:'manual-${n.millisecondsSinceEpoch}',groupId:selectedGroup,date:DateTime(n.year,n.month,n.day),openedAt:n,expectedMemberIds:List.unmodifiable(exp.map((m)=>m.id)),label:type,startTime:n,endTime:n,eligibleGroupIds:[selectedGroup],manualType:type,excludeFromStats:type=='Test badge');
     setState((){sessions.add(s);activeSession=s;groupId=selectedGroup;sessionOpen=true;result=null;});
     _saveAttendance();
@@ -342,7 +343,7 @@ class _ClubNageHomeState extends State<ClubNageHome> {
   List<Member> get expectedMembers {
     final s=activeSession;
     if(s!=null&&s.isOpen)return members.where((m)=>s.expectedMemberIds.contains(m.id)).toList();
-    return members.where((m)=>m.groups.contains(groupId)).toList();
+    return members.where((m)=>GroupEligibility.anyMatch(m.groups, [groupId])).toList();
   }
   List<AttendanceRecord> get currentRecords {
     final session = activeSession;
@@ -463,7 +464,7 @@ class _ClubNageHomeState extends State<ClubNageHome> {
       return;
     }
     final eligible=activeSession!.eligibleGroupIds.isEmpty?[groupId]:activeSession!.eligibleGroupIds;
-    if (!member.groups.any(eligible.contains)) {
+    if (!GroupEligibility.anyMatch(member.groups, eligible)) {
       setState(() => result = AttendanceResult(status: AttendanceStatus.denied, title: 'Mauvais groupe', message: '${member!.fullName} n’est pas inscrit à cette séance.', member: member, uid: identifier));
       return;
     }
@@ -2520,6 +2521,7 @@ class MemberInfoDetails extends StatelessWidget {
         field('Prénom', member.firstName),
         field('Catégorie', member.category),
         field('Session 1', member.session1),
+        field('Session 2', member.session2),
         field('Niveau', member.level),
         field('Date de naissance', displayBirth),
         field('Ville', member.city),

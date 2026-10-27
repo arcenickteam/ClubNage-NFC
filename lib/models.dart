@@ -12,6 +12,7 @@ class Member {
   final String legalRepresentative;
   final String category;
   final String session1;
+  final String session2;
   final String level;
   final String city;
   final String guardianPhone;
@@ -30,6 +31,7 @@ class Member {
     this.legalRepresentative = '',
     this.category = '',
     this.session1 = '',
+    this.session2 = '',
     this.level = '',
     this.city = '',
     this.guardianPhone = '',
