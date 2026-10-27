@@ -1,8 +1,8 @@
 import 'dart:typed_data';
-import 'package:excel/excel.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'services/infomaniak_kdrive_service.dart';
+import 'services/xlsx_data_reader.dart';
 
 /// V7: consultation isolée des exports kDrive, sans écriture ni migration
 /// des associations NFC/QR de la V6.
@@ -126,7 +126,7 @@ class _V7ImportScreenState extends State<V7ImportScreen> {
       progress('Base licenciés : décodage Excel');
       late final List<Map<String, String>> parsedPeople;
       try {
-        parsedPeople = parseMembers(Excel.decodeBytes(members));
+        parsedPeople = parseMembers(XlsxDataReader.readSheet(members, 'Licenciés'));
       } catch (e) {
         throw FormatException('Décodage base licenciés : $e');
       }
@@ -138,7 +138,7 @@ class _V7ImportScreenState extends State<V7ImportScreen> {
       progress('Planning : décodage Excel');
       late final List<Map<String, String>> parsedSlots;
       try {
-        parsedSlots = parseSchedule(Excel.decodeBytes(schedule));
+        parsedSlots = parseSchedule(XlsxDataReader.readSheet(schedule, 'Planning référentiel'));
       } catch (e) {
         throw FormatException('Décodage planning : $e');
       }
@@ -159,18 +159,12 @@ class _V7ImportScreenState extends State<V7ImportScreen> {
   }
 
 
-  String cell(List<Data?> row, int index) {
-    if (index >= row.length) return '';
-    final v = row[index]?.value;
-    if (v == null) return '';
-    if (v is TextCellValue) return (v.value.text ?? '').trim();
-    if (v is IntCellValue) return v.value.toString();
-    if (v is DoubleCellValue) return v.value.toString();
-    if (v is BoolCellValue) return v.value ? '1' : '0';
-    return v.toString().trim();
+  String cell(List<String> row, int index) {
+    if (index < 0 || index >= row.length) return '';
+    return row[index].trim();
   }
 
-  Future<Excel?> pickWorkbook() async {
+  Future<Uint8List?> pickWorkbook() async {
     final picked = await FilePicker.platform.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['xlsx'],
@@ -178,16 +172,17 @@ class _V7ImportScreenState extends State<V7ImportScreen> {
     );
     if (picked == null || picked.files.isEmpty) return null;
     final Uint8List? bytes = picked.files.single.bytes;
-    if (bytes == null) throw StateError('Impossible de lire le fichier sélectionné.');
-    return Excel.decodeBytes(bytes);
+    if (bytes == null) {
+      throw StateError('Impossible de lire le fichier sélectionné.');
+    }
+    return bytes;
   }
 
-  List<Map<String, String>> parseMembers(Excel excel) {
-    final sheet = excel.tables['Licenciés'];
-      if (sheet == null || sheet.rows.length < 5) {
+  List<Map<String, String>> parseMembers(List<List<String>> rows) {
+      if (rows.length < 5) {
         throw const FormatException('Onglet « Licenciés » absent ou vide.');
       }
-      final header = List<String>.generate(sheet.rows[3].length, (i) => cell(sheet.rows[3], i));
+      final header = List<String>.generate(rows[3].length, (i) => cell(rows[3], i));
       int col(String name) => header.indexWhere((x) => x.toLowerCase() == name.toLowerCase());
       final id = col('Licencie_ID');
       final nom = col('Nom');
@@ -196,7 +191,7 @@ class _V7ImportScreenState extends State<V7ImportScreen> {
         throw const FormatException('Colonnes identifiant / nom / prénom absentes.');
       }
     final result = <Map<String, String>>[];
-      for (final row in sheet.rows.skip(4)) {
+      for (final row in rows.skip(4)) {
         if (cell(row, id).isEmpty) continue;
         final activeGroups = <String>[];
         for (var i = 25; i < header.length && i < row.length; i++) {
@@ -220,7 +215,7 @@ class _V7ImportScreenState extends State<V7ImportScreen> {
     try {
       final excel = await pickWorkbook();
       if (excel == null) return;
-      final result = parseMembers(excel);
+      final result = parseMembers(XlsxDataReader.readSheet(excel, 'Licenciés'));
       if (!mounted) return;
       setState(() { people = result; status = 'Base V4 : ${result.length} licenciés chargés en lecture seule'; });
     } catch (e) {
@@ -230,11 +225,10 @@ class _V7ImportScreenState extends State<V7ImportScreen> {
     }
   }
 
-  List<Map<String, String>> parseSchedule(Excel excel) {
-      final sheet = excel.tables['Planning référentiel'];
-      if (sheet == null) throw const FormatException('Onglet « Planning référentiel » absent.');
+  List<Map<String, String>> parseSchedule(List<List<String>> rows) {
+      if (rows.isEmpty) throw const FormatException('Onglet « Planning référentiel » vide.');
       final result = <Map<String, String>>[];
-      for (final row in sheet.rows.skip(1)) {
+      for (final row in rows.skip(1)) {
         final group = cell(row, 0);
         if (group.isEmpty) continue;
         result.add({
@@ -250,7 +244,7 @@ class _V7ImportScreenState extends State<V7ImportScreen> {
     try {
       final excel = await pickWorkbook();
       if (excel == null) return;
-      final result = parseSchedule(excel);
+      final result = parseSchedule(XlsxDataReader.readSheet(excel, 'Planning référentiel'));
       if (!mounted) return;
       setState(() { slots = result; status = 'Planning V4 : ${result.length} entrées chargées en lecture seule'; });
     } catch (e) {
@@ -268,7 +262,7 @@ class _V7ImportScreenState extends State<V7ImportScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text('V7 · kDrive (lecture seule)')),
       body: ListView(padding: const EdgeInsets.all(16), children: [
-        const Text('V7.4 : diagnostic du téléchargement kDrive par jeton API stocké de manière sécurisée sur cet appareil. Lecture seule des deux fichiers V4. Les badges et présences restent inchangés.'),
+        const Text('V7.5 : lecture XLSX indépendante des styles et diagnostic kDrive par jeton API stocké de manière sécurisée sur cet appareil. Lecture seule des deux fichiers V4. Les badges et présences restent inchangés.'),
         const SizedBox(height: 12),
         FilledButton.icon(onPressed: busy ? null : configureApiToken, icon: const Icon(Icons.key), label: const Text('Configurer le jeton API kDrive')),
         const SizedBox(height: 8),
