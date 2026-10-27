@@ -7,6 +7,8 @@ import 'services/nfc_service.dart';
 import 'services/local_attendance_store.dart';
 import 'services/local_roster_store.dart';
 import 'services/group_eligibility.dart';
+import 'services/infomaniak_kdrive_service.dart';
+import 'services/kdrive_attendance_sync.dart';
 
 const navy = Color(0xFF071A2B);
 const panel = Color(0xFF0D263B);
@@ -58,6 +60,8 @@ class _ClubNageHomeState extends State<ClubNageHome> {
   final List<AttendanceRecord> records = [];
   final LocalAttendanceStore _attendanceStore = LocalAttendanceStore();
   bool _attendanceLoaded = false;
+  bool _syncingKdrive = false;
+  String _kdriveSyncMessage = 'Présences enregistrées localement.';
   String? _attendanceError;
   Future<void> _pendingAttendanceSave = Future<void>.value();
 
@@ -2157,11 +2161,39 @@ class _ClubNageHomeState extends State<ClubNageHome> {
   Widget _metric(String title, String value, IconData icon, Color color) => Card(child: Padding(padding: const EdgeInsets.all(14), child: Row(children: [Icon(icon, color: color, size: 28), const SizedBox(width: 8), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(title, style: const TextStyle(color: Colors.white60)), Text(value, style: const TextStyle(fontSize: 21, fontWeight: FontWeight.w800))]))])));
 
 
-  Widget _syncCard() => const Card(child: ListTile(
-    leading: Icon(Icons.cloud_sync_outlined, color: cyan),
-    title: Text('kDrive • mode hors ligne'),
-    subtitle: Text('Journal local immuable prêt pour synchronisation. OAuth Infomaniak à configurer avant connexion réelle.'),
-    trailing: Icon(Icons.chevron_right),
+  Future<void> _syncAttendanceToKdrive() async {
+    if (_syncingKdrive) return;
+    setState(() { _syncingKdrive = true; _kdriveSyncMessage = 'Synchronisation en cours…'; });
+    try {
+      await _pendingAttendanceSave;
+      final count = await KdriveAttendanceSync(InfomaniakKdriveService()).synchronize(
+        records: List.of(records), sessions: List.of(sessions), members: List.of(members));
+      if (mounted) setState(() => _kdriveSyncMessage = count == 0
+          ? 'Aucun nouveau pointage à transmettre.'
+          : '$count pointage(s) confirmé(s) dans Excel sur kDrive.');
+    } catch (e) {
+      if (mounted) setState(() => _kdriveSyncMessage = 'Échec / vérification nécessaire : $e');
+    } finally {
+      if (mounted) setState(() => _syncingKdrive = false);
+    }
+  }
+
+  Widget _syncCard() => Card(child: Padding(
+    padding: const EdgeInsets.all(12),
+    child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      const ListTile(
+        leading: Icon(Icons.cloud_sync_outlined, color: cyan),
+        title: Text('kDrive · Pointages NFC / QR'),
+        subtitle: Text('Envoi vers l’onglet Pointages NFC du classeur de suivi.'),
+      ),
+      Text(_kdriveSyncMessage),
+      const SizedBox(height: 8),
+      FilledButton.icon(
+        onPressed: _syncingKdrive ? null : _syncAttendanceToKdrive,
+        icon: Icon(_syncingKdrive ? Icons.hourglass_top : Icons.cloud_upload_outlined),
+        label: Text(_syncingKdrive ? 'Synchronisation…' : 'SYNCHRONISER LES PRÉSENCES'),
+      ),
+    ]),
   ));
 
   void _memberSheet(Member m) {

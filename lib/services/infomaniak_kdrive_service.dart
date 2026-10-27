@@ -5,7 +5,7 @@ import 'package:flutter_appauth/flutter_appauth.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 
-/// Accès kDrive en lecture seule. Jeton API saisi sur le téléphone et
+/// Accès kDrive avec jeton API saisi sur le téléphone et
 /// conservé dans le stockage sécurisé Android, jamais embarqué dans l’APK.
 class InfomaniakKdriveService {
   static const clientId = 'b26bf66d-f586-43fb-b70c-120b1f98c58c';
@@ -154,6 +154,48 @@ class InfomaniakKdriveService {
     }
     throw StateError('Classeur absent du dossier kDrive : $name '
         '(noms officiels et variantes (1) vérifiés).');
+  }
+
+  /// Téléversement conditionnel : si l'ETag n'est pas fourni par l'API,
+  /// l'application refuse l'écriture plutôt que d'écraser un autre utilisateur.
+  Future<void> replaceScheduleIfUnchanged(Uint8List content, String expectedEtag) async {
+    if (expectedEtag.isEmpty) throw StateError('ETag absent : écriture refusée.');
+    final id = await _findFileId(scheduleName);
+    final token = _accessToken;
+    if (token == null) throw StateError('Jeton kDrive absent.');
+    final url = Uri.https('api.infomaniak.com', '/3/drive/$driveId/upload', {
+      'file_id': '$id',
+      'total_size': '${content.length}',
+    });
+    final response = await http.post(url, headers: {
+      'Authorization': 'Bearer $token',
+      'Accept': 'application/json',
+      'Content-Type': 'application/octet-stream',
+      'If-Match': expectedEtag,
+    }, body: content).timeout(const Duration(seconds: 90));
+    if (response.statusCode == 409 || response.statusCode == 412) {
+      throw StateError('Le fichier a été modifié sur kDrive. Relancer la synchronisation.');
+    }
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StateError('Téléversement kDrive refusé (HTTP ${response.statusCode}).');
+    }
+    final body = jsonDecode(utf8.decode(response.bodyBytes));
+    if (body is! Map<String, dynamic> || body['result'] != 'success') {
+      throw StateError('Réponse de téléversement non confirmée : contrôle requis.');
+    }
+  }
+
+  Future<String> scheduleEtag() async {
+    final id = await _findFileId(scheduleName);
+    final info = await _jsonGet(Uri.https('api.infomaniak.com',
+      '/3/drive/$driveId/files/$id', {'with': 'etag'}));
+    final data = info['data'];
+    if (data is! Map<String, dynamic>) throw StateError('Métadonnées kDrive invalides.');
+    final etag = data['etag'];
+    if (etag is! String || etag.isEmpty) {
+      throw StateError('ETag kDrive non disponible : écriture bloquée par sécurité.');
+    }
+    return etag;
   }
 
   /// Liste uniquement les noms des entrées ZIP (pas le contenu des licenciés).
