@@ -3,6 +3,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'services/infomaniak_kdrive_service.dart';
 import 'services/xlsx_data_reader.dart';
+import 'services/local_roster_store.dart';
 
 /// V7: consultation isolée des exports kDrive, sans écriture ni migration
 /// des associations NFC/QR de la V6.
@@ -19,11 +20,29 @@ class _V7ImportScreenState extends State<V7ImportScreen> {
   String filter = '';
   bool busy = false;
   final kdrive = InfomaniakKdriveService();
+  final rosterStore = LocalRosterStore();
 
   @override
   void initState() {
     super.initState();
     _restoreKdrive();
+    _restoreRoster();
+  }
+
+  Future<void> _restoreRoster() async {
+    try {
+      final restored = await rosterStore.load();
+      if (mounted && restored != null) {
+        setState(() {
+          people = restored.map((m) => {
+            'id': m.id, 'nom': m.lastName, 'prenom': m.firstName,
+            'groupes': m.groups.join(', '),
+          }).toList();
+        });
+      }
+    } catch (e) {
+      if (mounted) setState(() => status = 'Base locale indisponible : $e');
+    }
   }
 
   Future<void> _restoreKdrive() async {
@@ -142,12 +161,13 @@ class _V7ImportScreenState extends State<V7ImportScreen> {
       } catch (e) {
         throw FormatException('Décodage planning : $e');
       }
+      await rosterStore.save(parsedPeople);
       if (!mounted) return;
       setState(() {
         people = parsedPeople;
         slots = parsedSlots;
-        status = 'kDrive : ${people.length} licenciés et ${slots.length} '
-            'créneaux actualisés (lecture seule).';
+        status = 'kDrive : ${people.length} licenciés enregistrés sur le téléphone et ${slots.length} '
+            'créneaux consultés. Rouvrir l’accueil pour utiliser les licenciés.';
       });
     } catch (e) {
       if (mounted) {
@@ -216,6 +236,7 @@ class _V7ImportScreenState extends State<V7ImportScreen> {
       final excel = await pickWorkbook();
       if (excel == null) return;
       final result = parseMembers(XlsxDataReader.readSheet(excel, 'Licenciés'));
+      await rosterStore.save(result);
       if (!mounted) return;
       setState(() { people = result; status = 'Base V4 : ${result.length} licenciés chargés en lecture seule'; });
     } catch (e) {
@@ -260,9 +281,9 @@ class _V7ImportScreenState extends State<V7ImportScreen> {
     final visible = people.where((p) => '${p['nom']} ${p['prenom']} ${p['groupes']} ${p['id']}'
         .toLowerCase().contains(q)).toList();
     return Scaffold(
-      appBar: AppBar(title: const Text('V7 · kDrive (lecture seule)')),
+      appBar: AppBar(title: const Text('V7.6 · kDrive')),
       body: ListView(padding: const EdgeInsets.all(16), children: [
-        const Text('V7.5 : lecture XLSX indépendante des styles et diagnostic kDrive par jeton API stocké de manière sécurisée sur cet appareil. Lecture seule des deux fichiers V4. Les badges et présences restent inchangés.'),
+        const Text('V7.6 : importation durable des licenciés sur ce téléphone. Les pointages restent locaux : aucun envoi vers kDrive n’est encore activé.'),
         const SizedBox(height: 12),
         FilledButton.icon(onPressed: busy ? null : configureApiToken, icon: const Icon(Icons.key), label: const Text('Configurer le jeton API kDrive')),
         const SizedBox(height: 8),

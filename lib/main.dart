@@ -5,6 +5,7 @@ import 'models.dart';
 import 'v7_import_screen.dart';
 import 'services/nfc_service.dart';
 import 'services/local_attendance_store.dart';
+import 'services/local_roster_store.dart';
 
 const navy = Color(0xFF071A2B);
 const panel = Color(0xFF0D263B);
@@ -71,7 +72,7 @@ class _ClubNageHomeState extends State<ClubNageHome> {
   DateTime? statsCustomStart;
   DateTime? statsCustomEnd;
 
-  final groups = const [
+  final _demoGroups = const [
     TrainingGroup('juniors', 'Compétition Juniors', 'Planning hebdomadaire', '18:45', '20:30'),
     TrainingGroup('benjamins', 'Compétition Benjamins', 'Planning hebdomadaire', '18:00', '19:30'),
     TrainingGroup('avenirs', 'Compétition Avenirs', 'Planning hebdomadaire', '18:00', '19:00'),
@@ -84,7 +85,7 @@ class _ClubNageHomeState extends State<ClubNageHome> {
     TrainingGroup('aqua', 'Aquaforme / Aquafitness', 'Planning hebdomadaire', '10:00', '11:00'),
   ];
 
-  final members = const [
+  final _demoMembers = const [
     Member(id: 'M2001', firstName: 'Laura', lastName: 'Jordan', groups: ['benjamins'], nfcUid: '', qrToken: 'CN:M2001', dossierStatus: 'Validé', email: 'annelaure.jordan@free.fr', phone: '06 82 79 58 94', dateOfBirth: '15/01/2014', legalRepresentative: 'JORDAN Anne Laure'),
     Member(id: 'M2002', firstName: 'Klara', lastName: 'Thomas', groups: ['benjamins'], nfcUid: '', qrToken: 'CN:M2002', dossierStatus: 'Validé', email: 'thomasklara791@gmail.com   karine.thomas18@orange.fr fabien.thomas71@laposte.net', phone: '0660475763 0608279557', dateOfBirth: '10/06/2013', legalRepresentative: 'THOMAS KARINE THOMAS FABIEN'),
     Member(id: 'M2003', firstName: 'Selma', lastName: 'Lagrimi', groups: ['avenirs'], nfcUid: '', qrToken: 'CN:M2003', dossierStatus: 'À compléter', email: 'celine.lagrimi@yahoo.com', phone: '06 07 66 26 26', dateOfBirth: '23/03/2017', legalRepresentative: ''),
@@ -108,6 +109,38 @@ class _ClubNageHomeState extends State<ClubNageHome> {
     Member(id: 'M2021', firstName: 'Marie', lastName: 'Jacquet', groups: ['benjamins'], nfcUid: '', qrToken: 'CN:M2021', dossierStatus: 'Validé', email: 'chacoco.jacquet@gmail.com', phone: '0669567766', dateOfBirth: '21/11/2013', legalRepresentative: ''),
     Member(id: 'M2022', firstName: 'Meissan', lastName: 'Kheddir', groups: ['benjamins'], nfcUid: '', qrToken: 'CN:M2022', dossierStatus: 'À compléter', email: 'hamidameissan@gmail.com', phone: '0605902735', dateOfBirth: '16/11/2014', legalRepresentative: ''),
   ];
+
+
+  List<Member> _importedMembers = [];
+  bool _rosterImported = false;
+  List<Member> get members => _rosterImported ? _importedMembers : _demoMembers;
+  List<TrainingGroup> get groups {
+    if (!_rosterImported) return _demoGroups;
+    final names = members.expand((m) => m.groups).toSet().toList()..sort();
+    return names.map((name) => TrainingGroup(name, name, 'Selon planning kDrive', '—', '—')).toList();
+  }
+
+  Future<void> _restoreRoster() async {
+    try {
+      final loaded = await LocalRosterStore().load();
+      if (!mounted || loaded == null) return;
+      setState(() {
+        _importedMembers = loaded;
+        _rosterImported = true;
+        memberGroupFilter = 'all';
+        if (groups.isNotEmpty) groupId = groups.first.id;
+        assignedUids.clear();
+        assignedQrTokens.clear();
+      });
+      await _loadAssignments();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Chargement des licenciés : $e')),
+        );
+      }
+    }
+  }
 
 
 
@@ -194,8 +227,13 @@ class _ClubNageHomeState extends State<ClubNageHome> {
   @override
   void initState() {
     super.initState();
-    _loadAssignments();
+    _restoreRosterOnStart();
     _restoreAttendance();
+  }
+
+  Future<void> _restoreRosterOnStart() async {
+    await _restoreRoster();
+    if (mounted && !_rosterImported) await _loadAssignments();
   }
 
   Future<void> _restoreAttendance() async {
@@ -654,9 +692,12 @@ class _ClubNageHomeState extends State<ClubNageHome> {
           IconButton(
             tooltip: 'V7 · Essais kDrive',
             icon: const Icon(Icons.cloud_download_outlined),
-            onPressed: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const V7ImportScreen()),
-            ),
+            onPressed: () async {
+              await Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const V7ImportScreen()),
+              );
+              if (mounted) await _restoreRoster();
+            },
           ),
         ],
       ),
