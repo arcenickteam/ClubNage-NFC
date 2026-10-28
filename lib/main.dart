@@ -399,7 +399,8 @@ class _ClubNageHomeState extends State<ClubNageHome> {
 
       // Attendre les écritures précédentes avant de valider la clôture.
       await _pendingAttendanceSave;
-      if (_attendanceError != null) throw StateError(_attendanceError);
+      final attendanceError = _attendanceError;
+      if (attendanceError != null) throw StateError(attendanceError);
       await _attendanceStore.save(AttendanceSnapshot(
         sessions: updatedSessions,
         records: List<AttendanceRecord>.of(records),
