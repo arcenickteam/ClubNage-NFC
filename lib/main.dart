@@ -61,6 +61,7 @@ class _ClubNageHomeState extends State<ClubNageHome> {
   final LocalAttendanceStore _attendanceStore = LocalAttendanceStore();
   bool _attendanceLoaded = false;
   bool _syncingKdrive = false;
+  bool _closingSession = false;
   String _kdriveSyncMessage = 'Présences enregistrées localement.';
   String? _attendanceError;
   Future<void> _pendingAttendanceSave = Future<void>.value();
@@ -133,7 +134,12 @@ class _ClubNageHomeState extends State<ClubNageHome> {
         _importedMembers = loaded;
         _rosterImported = true;
         memberGroupFilter = 'all';
-        if (groups.isNotEmpty) groupId = groups.first.id;
+        // Ne pas écraser le groupe d'une séance déjà restaurée.
+        if (activeSession != null) {
+          groupId = activeSession!.groupId;
+        } else if (groups.isNotEmpty && !groups.any((g) => g.id == groupId)) {
+          groupId = groups.first.id;
+        }
         assignedUids.clear();
         assignedQrTokens.clear();
       });
@@ -251,7 +257,11 @@ class _ClubNageHomeState extends State<ClubNageHome> {
         activeSession = snapshot.activeSessionId == null ? null :
             sessions.where((s) => s.id == snapshot.activeSessionId && s.isOpen).firstOrNull;
         sessionOpen = activeSession != null;
-        if (activeSession != null) groupId = activeSession!.groupId;
+        if (activeSession != null) {
+          groupId = activeSession!.groupId;
+        } else if (groups.isNotEmpty && !groups.any((g) => g.id == groupId)) {
+          groupId = groups.first.id;
+        }
         _attendanceLoaded = true;
       });
       _autoCloseExpiredSessionIfNeeded();
@@ -343,7 +353,20 @@ class _ClubNageHomeState extends State<ClubNageHome> {
     return null;
   }
 
-  TrainingGroup get currentGroup => groups.firstWhere((g) => g.id == groupId);
+  // Les créneaux historiques utilisent parfois 'benjamins' alors que la
+  // base importée utilise 'Benjamin'. Ne jamais laisser firstWhere provoquer
+  // une exception de build (écran noir/blanc) après une clôture.
+  TrainingGroup get currentGroup {
+    final available = groups;
+    for (final group in available) {
+      if (group.id == groupId) return group;
+    }
+    for (final group in available) {
+      if (GroupEligibility.anyMatch([group.id], [groupId])) return group;
+    }
+    if (available.isNotEmpty) return available.first;
+    return const TrainingGroup('aucun', 'Aucun groupe', 'Aucun créneau', '—', '—');
+  }
   List<Member> get expectedMembers {
     final s=activeSession;
     if(s!=null&&s.isOpen)return members.where((m)=>s.expectedMemberIds.contains(m.id)).toList();
@@ -358,28 +381,53 @@ class _ClubNageHomeState extends State<ClubNageHome> {
   int get lateCount => currentRecords.where((r) => r.status == AttendanceStatus.late).length;
 
   Future<void> _closeTrainingSession() async {
+    if (_closingSession || !_attendanceLoaded || _attendanceError != null) return;
     final session = activeSession;
+    if (session == null || !session.isOpen) return;
 
-    if (session != null && session.isOpen) {
+    setState(() => _closingSession = true);
+    try {
+      // Empêcher un nouveau pointage pendant la clôture.
+      if (nfc.isRunning) await nfc.stop();
+      if (!mounted) return;
+
       final closed = session.close(DateTime.now());
-      final index = sessions.indexWhere((s) => s.id == session.id);
+      final updatedSessions = List<TrainingSession>.of(sessions);
+      final index = updatedSessions.indexWhere((s) => s.id == session.id);
+      if (index < 0) throw StateError('Séance introuvable dans l’historique local.');
+      updatedSessions[index] = closed;
 
+      // Attendre les écritures précédentes avant de valider la clôture.
+      await _pendingAttendanceSave;
+      if (_attendanceError != null) throw StateError(_attendanceError);
+      await _attendanceStore.save(AttendanceSnapshot(
+        sessions: updatedSessions,
+        records: List<AttendanceRecord>.of(records),
+        activeSessionId: null,
+      ));
+      if (!mounted) return;
       setState(() {
-        if (index >= 0) {
-          sessions[index] = closed;
-        }
+        sessions[index] = closed;
         activeSession = null;
         sessionOpen = false;
+        scanning = false;
         result = null;
+        // Un créneau historique peut avoir un ID différent de la base kDrive.
+        // Sélectionner un groupe réellement disponible après la clôture.
+        groupId = currentGroup.id;
       });
-    } else {
-      setState(() {
-        activeSession = null;
-        sessionOpen = false;
-        result = null;
-      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Séance terminée et enregistrée localement.')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Clôture non enregistrée : $e'),
+        backgroundColor: Colors.redAccent,
+      ));
+    } finally {
+      if (mounted) setState(() => _closingSession = false);
     }
-    _saveAttendance();
   }
 
   Future<void> _go(int index) async {
@@ -441,7 +489,7 @@ class _ClubNageHomeState extends State<ClubNageHome> {
   }
 
   void _processIdentifier(String identifier, String method) {
-    if (!_attendanceLoaded || _attendanceError != null) return;
+    if (!_attendanceLoaded || _attendanceError != null || _closingSession) return;
     _autoCloseExpiredSessionIfNeeded();
     if (!sessionOpen ||
         activeSession == null ||
@@ -1531,7 +1579,7 @@ class _ClubNageHomeState extends State<ClubNageHome> {
       const SizedBox(height:4),
       const Text('Ouverture H−30 min • retard H+15 min • fermeture de sécurité fin+4 h',style:TextStyle(color:Colors.white60)),
       const SizedBox(height:14),
-      if(sessionOpen&&activeSession!=null) Card(child:ListTile(leading:const Icon(Icons.lock_open_rounded,color:green),title:Text(activeSession!.label??currentGroup.name,style:const TextStyle(fontWeight:FontWeight.w800)),subtitle:Text('OUVERTE • ${_time(activeSession!.openedAt)}'),trailing:FilledButton(onPressed:_closeTrainingSession,child:const Text('FERMER')))),
+      if(sessionOpen&&activeSession!=null) Card(child:ListTile(leading:const Icon(Icons.lock_open_rounded,color:green),title:Text(activeSession!.label??currentGroup.name,style:const TextStyle(fontWeight:FontWeight.w800)),subtitle:Text('OUVERTE • ${_time(activeSession!.openedAt)}'),trailing:FilledButton(onPressed:_closingSession?null:_closeTrainingSession,child:Text(_closingSession?'CLÔTURE…':'FERMER')))),
       if(!sessionOpen)...today.map((slot){final can=_slotCanOpen(slot);return Card(child:ListTile(leading:Icon(can?Icons.play_circle_fill_rounded:Icons.schedule_rounded,color:can?green:Colors.white38),title:Text(slot['label'] as String,style:const TextStyle(fontWeight:FontWeight.w800)),subtitle:Text('${_dayName(slot['weekday'] as int)} • ${slot['start']}–${slot['end']}'),trailing:FilledButton(onPressed:can?()=>_openScheduledSession(slot):null,child:const Text('OUVRIR'))));}),
       const SizedBox(height:14),
       OutlinedButton.icon(onPressed:sessionOpen?null:_openManualSessionDialog,icon:const Icon(Icons.add_circle_outline_rounded),label:const Text('OUVRIR UNE SÉANCE MANUELLE'),style:OutlinedButton.styleFrom(minimumSize:const Size.fromHeight(56))),
