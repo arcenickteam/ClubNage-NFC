@@ -11,7 +11,7 @@ class XlsxPointageWriter {
   static const headers = <String>[
     'ID_Pointage', 'Date', 'Heure', 'Licencie_ID', 'Nom', 'Prénom',
     'Activité', 'Groupe', 'Séance', 'Type_badge', 'Appareil_ID',
-    'Date_synchronisation',
+    'Date_synchronisation', 'Statut',
   ];
   static const _mainNs = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main';
   static const _relNs = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
@@ -48,23 +48,29 @@ class XlsxPointageWriter {
     if (existingRows.isNotEmpty && !_sameHeader(existingRows.first)) {
       throw StateError('Onglet Pointages NFC existant avec colonnes incompatibles. Aucun fichier modifié.');
     }
-    final ids = <String>{};
-    for (final row in existingRows.skip(1)) {
-      if (row.isNotEmpty && row.first.trim().isNotEmpty) ids.add(row.first.trim());
+    final rows = <List<String>>[headers, ...existingRows.skip(1).map((r) => List<String>.of(r))];
+    final indices = <String, int>{};
+    for (var i = 1; i < rows.length; i++) {
+      if (rows[i].isNotEmpty && rows[i].first.trim().isNotEmpty) {
+        if (indices.containsKey(rows[i].first.trim())) {
+          throw StateError('Identifiants dupliqués dans Excel : correction manuelle nécessaire.');
+        }
+        indices[rows[i].first.trim()] = i;
+      }
     }
-    final newRows = <List<String>>[];
+    if (additions.isEmpty) return bytes;
     for (final row in additions) {
       if (row.length != headers.length || row.first.trim().isEmpty) {
-        throw ArgumentError('Pointage invalide : 12 colonnes et ID requis.');
+        throw ArgumentError('Pointage invalide : 13 colonnes et ID requis.');
       }
-      if (ids.add(row.first.trim())) newRows.add(row);
+      final index = indices[row.first.trim()];
+      if (index == null) {
+        indices[row.first.trim()] = rows.length;
+        rows.add(List<String>.of(row));
+      } else {
+        rows[index] = List<String>.of(row);
+      }
     }
-    if (newRows.isEmpty) return bytes;
-    final rows = <List<String>>[
-      if (existingRows.isEmpty) headers,
-      ...existingRows,
-      ...newRows,
-    ];
     // Si l'onglet existait déjà, les anciennes lignes sont reconstruites
     // exclusivement avec leurs valeurs (la feuille Pointages NFC nous appartient).
     final xmlRows = StringBuffer();
@@ -130,6 +136,7 @@ class XlsxPointageWriter {
     return Uint8List.fromList(ZipEncoder().encode(result)!);
   }
 
-  static bool _sameHeader(List<String> row) => row.length >= headers.length &&
-      List.generate(headers.length, (i) => row[i].trim() == headers[i]).every((x) => x);
+  static bool _sameHeader(List<String> row) =>
+      (row.length == 12 || row.length == headers.length) &&
+      List.generate(row.length, (i) => row[i].trim() == headers[i]).every((x) => x);
 }

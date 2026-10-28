@@ -1,3 +1,5 @@
+import 'package:url_launcher/url_launcher.dart';
+import 'services/manual_attendance.dart';
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -521,21 +523,20 @@ class _ClubNageHomeState extends State<ClubNageHome> {
       setState(() => result = AttendanceResult(status: AttendanceStatus.denied, title: 'Mauvais groupe', message: '${member!.fullName} n’est pas inscrit à cette séance.', member: member, uid: identifier));
       return;
     }
-    if (currentRecords.any((r) => r.memberId == member!.id)) {
+    if (currentRecords.any((r) => r.memberId == member!.id && r.status != AttendanceStatus.absent)) {
       setState(() => result = AttendanceResult(status: AttendanceStatus.duplicate, title: 'Déjà pointé', message: '${member!.fullName} est déjà enregistré pour cette séance.', member: member, uid: identifier));
       return;
     }
     final now = DateTime.now();
     final start=activeSession!.startTime??now;
     final status=now.isAfter(start.add(const Duration(minutes:15)))?AttendanceStatus.late:AttendanceStatus.present;
+    final previous = currentRecords.where((r) => r.memberId == member!.id).toList();
     setState(() {
+      records.removeWhere((r) => r.sessionId == activeSession!.id && r.memberId == member!.id);
       records.add(AttendanceRecord(
-        memberId: member!.id,
-        groupId: groupId,
-        sessionId: activeSession!.id,
-        timestamp: now,
-        status: status,
-        method: method,
+        memberId: member!.id, groupId: groupId, sessionId: activeSession!.id,
+        timestamp: previous.isEmpty ? now : previous.first.timestamp,
+        status: status, method: method,
       ));
       result = AttendanceResult(status: status, title: status == AttendanceStatus.late ? 'Retard enregistré' : 'Présent', message: member.fullName, member: member, uid: identifier);
     });
@@ -1371,18 +1372,20 @@ class _ClubNageHomeState extends State<ClubNageHome> {
         else
           ...currentRecords.reversed.take(5).map((r) {
             final m = _memberById(r.memberId);
-            final late = r.status == AttendanceStatus.late;
+            final lateValue = r.status == AttendanceStatus.late;
+            final absent = r.status == AttendanceStatus.absent;
+            final recordColor = absent ? Colors.redAccent : (lateValue ? orange : green);
 
             return Card(
               child: ListTile(
                 leading: CircleAvatar(
-                  backgroundColor: (late ? orange : green)
+                  backgroundColor: recordColor
                       .withValues(alpha: .15),
                   child: Icon(
-                    late
+                    absent ? Icons.person_off : lateValue
                         ? Icons.schedule_rounded
                         : Icons.check_rounded,
-                    color: late ? orange : green,
+                    color: recordColor,
                   ),
                 ),
                 title: Text(
@@ -1392,12 +1395,12 @@ class _ClubNageHomeState extends State<ClubNageHome> {
                   ),
                 ),
                 subtitle: Text(
-                  '${late ? 'Retard' : 'Présent'}'
+                  '${_attendanceLabel(r.status)}'
                   ' • ${_time(r.timestamp)}'
                   ' • ${r.method}',
                 ),
                 trailing: Icon(
-                  r.method == 'NFC'
+                  r.method == 'MANUEL' ? Icons.edit_note : r.method == 'NFC'
                       ? Icons.nfc_rounded
                       : Icons.qr_code_rounded,
                   color: Colors.white54,
@@ -1591,6 +1594,33 @@ class _ClubNageHomeState extends State<ClubNageHome> {
     ]);
   }
 
+  String _attendanceLabel(AttendanceStatus? status) => switch (status) {
+    AttendanceStatus.present => 'Présent',
+    AttendanceStatus.late => 'Retard',
+    AttendanceStatus.absent => 'Absent',
+    _ => 'Non pointé',
+  };
+
+  void _setManualAttendance(Member member, AttendanceStatus status) {
+    if (_closingSession || !_attendanceLoaded || _attendanceError != null) return;
+    _autoCloseExpiredSessionIfNeeded();
+    final session = activeSession;
+    if (session == null || !session.isOpen) return;
+    try {
+      final record = ManualAttendance.update(records: records, session: session,
+          memberId: member.id, status: status, now: DateTime.now());
+      setState(() {
+        records.removeWhere((r) => r.sessionId == session.id && r.memberId == member.id);
+        records.add(record);
+      });
+      _saveAttendance();
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+    }
+  }
+
+  String _presenceSearch = '';
+
   Widget _presencePage() {
     final current = expectedMembers;
     return ListView(padding: const EdgeInsets.all(16), children: [
@@ -1598,20 +1628,41 @@ class _ClubNageHomeState extends State<ClubNageHome> {
       const SizedBox(height: 12),
       Row(children:[Expanded(child:_coloredGroupLabel(_activeSessionLabel, fontSize:19)), const SizedBox(width:8), Text('$presentCount/${current.length} présents', style:const TextStyle(fontSize:14,fontWeight:FontWeight.w800,color:Colors.white70))]),
       const SizedBox(height: 8),
-      ...current.map((m) {
+      TextField(
+        decoration: const InputDecoration(labelText: 'Rechercher un licencié', prefixIcon: Icon(Icons.search)),
+        onChanged: (value) => setState(() => _presenceSearch = value),
+      ),
+      if (!sessionOpen) const Padding(padding: EdgeInsets.all(8),
+        child: Text('Ouvrez une séance pour effectuer l’appel.')),
+      ...current.where((m) => m.fullName.toLowerCase().contains(_presenceSearch.trim().toLowerCase())).map((m) {
         AttendanceRecord? rec;
         for (final r in currentRecords) { if (r.memberId == m.id) { rec = r; break; } }
-        final isLate = rec?.status == AttendanceStatus.late;
-        final isPresent = rec != null;
-        return Card(child: ListTile(
-          leading: Icon(isPresent ? (isLate ? Icons.schedule : Icons.check_circle) : Icons.radio_button_unchecked, color: isPresent ? (isLate ? orange : green) : Colors.white38),
-          title: Text(m.fullName),
-          subtitle: Text(isPresent ? '${isLate ? 'Retard' : 'Présent'} • ${rec.method} • ${_time(rec.timestamp)}' : 'Absent / non pointé'),
-        ));
+        final selected = rec?.status;
+        final enabled = sessionOpen && !_closingSession && _attendanceError == null;
+        return Card(child: Padding(padding: const EdgeInsets.all(12), child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(children: [Expanded(child: Text(m.fullName,
+              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold))),
+              IconButton(tooltip: 'Fiche du licencié', icon: const Icon(Icons.info_outline),
+                onPressed: () => _memberSheet(m)),
+            ]),
+            Text(_attendanceLabel(selected)),
+            const SizedBox(height: 8),
+            Wrap(spacing: 8, runSpacing: 8, children: [
+              for (final status in [AttendanceStatus.present, AttendanceStatus.late, AttendanceStatus.absent])
+                ChoiceChip(label: Text(_attendanceLabel(status)), selected: selected == status,
+                  selectedColor: status == AttendanceStatus.present ? green :
+                    status == AttendanceStatus.late ? orange : Colors.redAccent,
+                  onSelected: enabled ? (_) => _setManualAttendance(m, status) : null),
+            ]),
+            if (rec != null) Text('${rec.method} • ${_time(rec.timestamp)}',
+              style: const TextStyle(color: Colors.white60)),
+          ],
+        )));
       }),
       const SizedBox(height: 12),
       const Text('Historique', style: TextStyle(fontSize: 19, fontWeight: FontWeight.w800)),
-      for (final r in records.reversed) ListTile(dense: true, leading: const Icon(Icons.history), title: Text(_memberById(r.memberId).fullName), subtitle: Text('${_sessionLabelForRecord(r)} • ${_time(r.timestamp)} • ${r.method}')),
+      for (final r in records.reversed) ListTile(dense: true, leading: const Icon(Icons.history), title: Text(_memberById(r.memberId).fullName), subtitle: Text('${_sessionLabelForRecord(r)} • ${_attendanceLabel(r.status)} • ${_time(r.timestamp)} • ${r.method}')),
     ]);
   }
 
@@ -1771,7 +1822,7 @@ class _ClubNageHomeState extends State<ClubNageHome> {
     final expected = memberSessions.length;
 
     int present = 0;
-    int late = 0;
+    int lateValue = 0;
 
     for (final session in memberSessions) {
       final memberRecords = _recordsForSession(session)
@@ -1789,7 +1840,7 @@ class _ClubNageHomeState extends State<ClubNageHome> {
       );
 
       if (wasPresent) present++;
-      if (wasLate) late++;
+      if (wasLate) lateValue++;
     }
 
     final absent = expected - present;
@@ -1872,7 +1923,7 @@ class _ClubNageHomeState extends State<ClubNageHome> {
                 Expanded(
                   child: _scannerMiniMetric(
                     'Retards',
-                    '$late',
+                    '$lateValue',
                     Icons.schedule_rounded,
                     orange,
                   ),
@@ -2211,14 +2262,16 @@ class _ClubNageHomeState extends State<ClubNageHome> {
 
 
   Future<void> _syncAttendanceToKdrive() async {
-    if (_syncingKdrive) return;
+    if (_syncingKdrive || !_attendanceLoaded || _attendanceError != null) return;
     setState(() { _syncingKdrive = true; _kdriveSyncMessage = 'Synchronisation en cours…'; });
     try {
       await _pendingAttendanceSave;
+      final saveError = _attendanceError;
+      if (saveError != null) throw StateError(saveError);
       final count = await KdriveAttendanceSync(InfomaniakKdriveService()).synchronize(
         records: List.of(records), sessions: List.of(sessions), members: List.of(members));
       if (mounted) setState(() => _kdriveSyncMessage = count == 0
-          ? 'Aucun nouveau pointage à transmettre.'
+          ? 'Aucun pointage nouveau ou modifié à transmettre.'
           : '$count pointage(s) confirmé(s) dans Excel sur kDrive.');
     } catch (e) {
       if (mounted) setState(() => _kdriveSyncMessage = 'Échec / vérification nécessaire : $e');
@@ -2232,7 +2285,7 @@ class _ClubNageHomeState extends State<ClubNageHome> {
     child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       const ListTile(
         leading: Icon(Icons.cloud_sync_outlined, color: cyan),
-        title: Text('kDrive · Pointages NFC / QR'),
+        title: Text('kDrive · NFC / QR / Manuel'),
         subtitle: Text('Envoi vers l’onglet Pointages NFC du classeur de suivi.'),
       ),
       Text(_kdriveSyncMessage),
@@ -2246,7 +2299,7 @@ class _ClubNageHomeState extends State<ClubNageHome> {
   ));
 
   void _memberSheet(Member m) {
-    showModalBottomSheet(context: context, isScrollControlled: true, builder: (_) => SafeArea(child: Padding(padding: const EdgeInsets.all(20), child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+    showModalBottomSheet(context: context, isScrollControlled: true, builder: (_) => SafeArea(child: SingleChildScrollView(child: Padding(padding: const EdgeInsets.all(20), child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       Text(m.fullName, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w900)),
       const SizedBox(height: 8),
       MemberInfoDetails(member: m),
@@ -2258,7 +2311,7 @@ class _ClubNageHomeState extends State<ClubNageHome> {
       OutlinedButton.icon(onPressed: () { Navigator.pop(context); _associateQr(m); }, icon: const Icon(Icons.qr_code_scanner_rounded), label: const Text('SCANNER ET ASSOCIER LE QR'), style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(54))),
       const SizedBox(height: 8),
       OutlinedButton.icon(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close), label: const Text('FERMER')),
-    ]))));
+    ])))));
   }
 
   String _sessionLabelForRecord(AttendanceRecord r) {
@@ -2579,6 +2632,36 @@ class MemberInfoDetails extends StatelessWidget {
   final Member member;
   const MemberInfoDetails({super.key, required this.member});
 
+  List<String> _numbers(String raw) => RegExp(r'(?<![0-9])(?:0[1-9]|\+33\s*[1-9]|0033\s*[1-9])(?:[ .-]*[0-9]){8}(?![0-9])')
+      .allMatches(raw).map((m) => m.group(0)!.replaceAll(RegExp(r'[ .-]'), '')).toSet().toList();
+
+  Future<void> _contact(BuildContext context, String number, String scheme) async {
+    try {
+      if (!await launchUrl(Uri(scheme: scheme, path: number), mode: LaunchMode.externalApplication)) {
+        throw StateError('Aucune application disponible.');
+      }
+    } catch (_) {
+      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Impossible d’ouvrir ${scheme == 'tel' ? 'le téléphone' : 'les SMS'} pour $number.')));
+    }
+  }
+
+  Widget _contactActions(BuildContext context, String label, String raw) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [for (final number in _numbers(raw)) Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text('$label : $number'),
+        Wrap(spacing: 12, children: [
+          OutlinedButton.icon(icon: const Icon(Icons.call), label: const Text('Appel'),
+            onPressed: () => _contact(context, number, 'tel')),
+          OutlinedButton.icon(icon: const Icon(Icons.sms), label: const Text('SMS'),
+            onPressed: () => _contact(context, number, 'sms')),
+        ]),
+      ]),
+    )],
+  );
+
   @override
   Widget build(BuildContext context) {
     final status = member.dossierStatus.trim().toLowerCase();
@@ -2608,6 +2691,8 @@ class MemberInfoDetails extends StatelessWidget {
         field('Ville', member.city),
         field('Téléphone', member.phone),
         if (minor) field('Téléphone tuteur', member.guardianPhone),
+        if (minor) _contactActions(context, 'Tuteur', member.guardianPhone),
+        _contactActions(context, 'Licencié', member.phone),
         Padding(
           padding: const EdgeInsets.only(top: 4, bottom: 8),
           child: Text('Validation du dossier : ${value(member.dossierStatus)}',

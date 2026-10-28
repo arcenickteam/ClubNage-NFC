@@ -117,7 +117,7 @@ class TrainingSession {
       );
 }
 
-enum AttendanceStatus { present, late, duplicate, denied, unknown }
+enum AttendanceStatus { present, late, duplicate, denied, unknown, absent }
 
 class AttendanceResult {
   final AttendanceStatus status;
