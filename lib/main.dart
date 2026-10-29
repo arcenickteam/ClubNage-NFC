@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:url_launcher/url_launcher.dart';
 import 'services/manual_attendance.dart';
 import 'package:flutter/material.dart';
@@ -48,7 +49,12 @@ class ClubNageHome extends StatefulWidget {
   State<ClubNageHome> createState() => _ClubNageHomeState();
 }
 
-class _ClubNageHomeState extends State<ClubNageHome> {
+class _ClubNageHomeState extends State<ClubNageHome> with WidgetsBindingObserver {
+  Timer? _sessionTimer;
+  bool _rosterReady = false;
+  String _statsMemberSearch = '';
+  List<TrainingSession> get _openSessions => sessions.where((s) => s.isOpen).toList();
+
   final NfcService nfc = NfcService();
   int page = 0;
   String groupId = 'juniors';
@@ -146,6 +152,7 @@ class _ClubNageHomeState extends State<ClubNageHome> {
         assignedQrTokens.clear();
       });
       await _loadAssignments();
+      _reconcileSessions();
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -190,22 +197,22 @@ class _ClubNageHomeState extends State<ClubNageHome> {
   DateTime _at(DateTime d,String t){final p=t.split(':');return DateTime(d.year,d.month,d.day,int.parse(p[0]),int.parse(p[1]));}
   List<Map<String,Object>> get _todaySlots => _weeklySlots.where((s)=>s['weekday']==DateTime.now().weekday).toList();
   List<String> _slotGroups(Map<String,Object> s)=>List<String>.from(s['groups'] as List);
-  bool _slotCanOpen(Map<String,Object> s){final n=DateTime.now(),st=_at(n,s['start'] as String),en=_at(n,s['end'] as String);return !n.isBefore(st.subtract(const Duration(minutes:30)))&&n.isBefore(en.add(const Duration(hours:4)));}
+  bool _slotCanOpen(Map<String,Object> s){final n=DateTime.now(),st=_at(n,s['start'] as String),en=_at(n,s['end'] as String);return !n.isBefore(st.subtract(const Duration(minutes:30)))&&n.isBefore(st.add(const Duration(hours:4)));}
   List<Member> _membersForGroups(List<String> ids)=>members.where((m)=>GroupEligibility.anyMatch(m.groups, ids)).toList();
 
   void _openScheduledSession(Map<String,Object> slot){
     if (!_attendanceLoaded || _attendanceError != null) return;
-    if(sessionOpen){ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('Une séance est déjà ouverte.')));return;}
     if(!_slotCanOpen(slot)){ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('Ouverture possible 30 minutes avant le début.')));return;}
     final n=DateTime.now(),ids=_slotGroups(slot),exp=_membersForGroups(ids);
-    final s=TrainingSession(id:'${slot['id']}-${n.millisecondsSinceEpoch}',groupId:ids.first,date:DateTime(n.year,n.month,n.day),openedAt:n,expectedMemberIds:List.unmodifiable(exp.map((m)=>m.id)),label:slot['label'] as String,startTime:_at(n,slot['start'] as String),endTime:_at(n,slot['end'] as String),eligibleGroupIds:List.unmodifiable(ids));
+    final sessionId = '${slot['id']}-${n.year}-${n.month}-${n.day}';
+    if (sessions.any((s) => s.id == sessionId)) return;
+    final s=TrainingSession(id:sessionId,groupId:ids.first,date:DateTime(n.year,n.month,n.day),openedAt:n,expectedMemberIds:List.unmodifiable(exp.map((m)=>m.id)),label:slot['label'] as String,startTime:_at(n,slot['start'] as String),endTime:_at(n,slot['end'] as String),eligibleGroupIds:List.unmodifiable(ids));
     setState((){sessions.add(s);activeSession=s;groupId=ids.first;sessionOpen=true;result=null;});
     _saveAttendance();
   }
 
   Future<void> _openManualSessionDialog() async{
     if (!_attendanceLoaded || _attendanceError != null) return;
-    if(sessionOpen){ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('Fermez d’abord la séance active.')));return;}
     String type='Entraînement exceptionnel',selectedGroup=groupId;
     final ok=await showDialog<bool>(context:context,builder:(dc)=>StatefulBuilder(builder:(context,setLocal)=>AlertDialog(
       title:const Text('Ouvrir une séance manuelle'),
@@ -230,23 +237,84 @@ class _ClubNageHomeState extends State<ClubNageHome> {
     _saveAttendance();
   }
 
-  void _autoCloseExpiredSessionIfNeeded(){
-    final s=activeSession;if(s==null||!s.isOpen||s.endTime==null)return;
-    if(DateTime.now().isBefore(s.endTime!.add(const Duration(hours:4))))return;
-    final i=sessions.indexWhere((x)=>x.id==s.id),closed=s.close(DateTime.now());
-    setState((){if(i>=0)sessions[i]=closed;activeSession=null;sessionOpen=false;result=null;});
-    _saveAttendance();
+  // Réconciliation unique au démarrage, au retour au premier plan et chaque minute.
+  // Aucun setState n'est déclenché pendant la construction d'un widget.
+  void _reconcileSessions() {
+    if (!mounted || !_attendanceLoaded || !_rosterReady || _attendanceError != null || _closingSession) return;
+    final now = DateTime.now();
+    var changed = false;
+    for (var i = 0; i < sessions.length; i++) {
+      final s = sessions[i];
+      final deadline = (s.startTime ?? s.openedAt).add(const Duration(hours: 4));
+      if (s.isOpen && !now.isBefore(deadline)) {
+        sessions[i] = s.close(now);
+        changed = true;
+      }
+    }
+    for (final slot in _todaySlots) {
+      final start = _at(now, slot['start'] as String);
+      if (now.isBefore(start.subtract(const Duration(minutes: 30))) ||
+          !now.isBefore(start.add(const Duration(hours: 4)))) continue;
+      final id = '${slot['id']}-${now.year}-${now.month}-${now.day}';
+      if (sessions.any((s) => s.id == id)) continue;
+      final ids = _slotGroups(slot);
+      sessions.add(TrainingSession(
+        id: id, groupId: ids.first,
+        date: DateTime(now.year, now.month, now.day), openedAt: now,
+        expectedMemberIds: List.unmodifiable(_membersForGroups(ids).map((m) => m.id)),
+        label: slot['label'] as String, startTime: start,
+        endTime: _at(now, slot['end'] as String),
+        eligibleGroupIds: List.unmodifiable(ids),
+      ));
+      changed = true;
+    }
+    if (activeSession == null || !activeSession!.isOpen) {
+      final next = _openSessions.firstOrNull;
+      if (activeSession?.id != next?.id) changed = true;
+      activeSession = next;
+    }
+    if (activeSession != null) groupId = activeSession!.groupId;
+    sessionOpen = activeSession != null;
+    if (!sessionOpen && scanning) {
+      nfc.stop();
+      scanning = false;
+      changed = true;
+    }
+    if (changed) {
+      setState(() { result = null; });
+      _saveAttendance();
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _reconcileSessions();
+  }
+
+  @override
+  void dispose() {
+    _sessionTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    nfc.stop();
+    super.dispose();
   }
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _sessionTimer = Timer.periodic(const Duration(minutes: 1), (_) => _reconcileSessions());
     _restoreRosterOnStart();
     _restoreAttendance();
   }
 
   Future<void> _restoreRosterOnStart() async {
-    await _restoreRoster();
-    if (mounted && !_rosterImported) await _loadAssignments();
+    try {
+      await _restoreRoster();
+      if (mounted && !_rosterImported) await _loadAssignments();
+    } finally {
+      _rosterReady = true;
+      _reconcileSessions();
+    }
   }
 
   Future<void> _restoreAttendance() async {
@@ -266,7 +334,7 @@ class _ClubNageHomeState extends State<ClubNageHome> {
         }
         _attendanceLoaded = true;
       });
-      _autoCloseExpiredSessionIfNeeded();
+      _reconcileSessions();
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -406,18 +474,18 @@ class _ClubNageHomeState extends State<ClubNageHome> {
       await _attendanceStore.save(AttendanceSnapshot(
         sessions: updatedSessions,
         records: List<AttendanceRecord>.of(records),
-        activeSessionId: null,
+        activeSessionId: updatedSessions.where((s) => s.isOpen && s.id != session.id).firstOrNull?.id,
       ));
       if (!mounted) return;
       setState(() {
         sessions[index] = closed;
-        activeSession = null;
-        sessionOpen = false;
+        activeSession = updatedSessions.where((s) => s.isOpen).firstOrNull;
+        sessionOpen = activeSession != null;
         scanning = false;
         result = null;
         // Un créneau historique peut avoir un ID différent de la base kDrive.
         // Sélectionner un groupe réellement disponible après la clôture.
-        groupId = currentGroup.id;
+        groupId = activeSession?.groupId ?? currentGroup.id;
       });
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Séance terminée et enregistrée localement.')),
@@ -493,7 +561,6 @@ class _ClubNageHomeState extends State<ClubNageHome> {
 
   void _processIdentifier(String identifier, String method) {
     if (!_attendanceLoaded || _attendanceError != null || _closingSession) return;
-    _autoCloseExpiredSessionIfNeeded();
     if (!sessionOpen ||
         activeSession == null ||
         activeSession!.groupId != groupId ||
@@ -695,6 +762,7 @@ class _ClubNageHomeState extends State<ClubNageHome> {
       _sessionsPage(),
       _presencePage(),
       _statsPage(),
+      _cloudPage(),
     ];
 
     return Scaffold(
@@ -783,6 +851,8 @@ class _ClubNageHomeState extends State<ClubNageHome> {
         return 'Présences';
       case 6:
         return 'Statistiques';
+      case 7:
+        return 'Synchronisation';
       default:
         return 'Club MN NFC';
     }
@@ -982,13 +1052,7 @@ class _ClubNageHomeState extends State<ClubNageHome> {
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () {
                   Navigator.pop(sheetContext);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text(
-                        'Connexion kDrive à configurer avec les accès Infomaniak.',
-                      ),
-                    ),
-                  );
+                  _go(7);
                 },
               ),
               ListTile(
@@ -1581,12 +1645,47 @@ class _ClubNageHomeState extends State<ClubNageHome> {
     return ListView(padding:const EdgeInsets.all(16),children:[
       const Text('Séances du jour',style:TextStyle(fontSize:24,fontWeight:FontWeight.w900)),
       const SizedBox(height:4),
-      const Text('Ouverture H−30 min • retard H+15 min • fermeture de sécurité fin+4 h',style:TextStyle(color:Colors.white60)),
+      const Text('Ouverture H−30 min • retard H+15 min • fermeture automatique début+4 h',style:TextStyle(color:Colors.white60)),
       const SizedBox(height:14),
-      if(sessionOpen&&activeSession!=null) Card(child:ListTile(leading:const Icon(Icons.lock_open_rounded,color:green),title:Text(activeSession!.label??currentGroup.name,style:const TextStyle(fontWeight:FontWeight.w800)),subtitle:Text('OUVERTE • ${_time(activeSession!.openedAt)}'),trailing:FilledButton(onPressed:_closingSession?null:_closeTrainingSession,child:Text(_closingSession?'CLÔTURE…':'FERMER')))),
-      if(!sessionOpen)...today.map((slot){final can=_slotCanOpen(slot);return Card(child:ListTile(leading:Icon(can?Icons.play_circle_fill_rounded:Icons.schedule_rounded,color:can?green:Colors.white38),title:Text(slot['label'] as String,style:const TextStyle(fontWeight:FontWeight.w800)),subtitle:Text('${_dayName(slot['weekday'] as int)} • ${slot['start']}–${slot['end']}'),trailing:FilledButton(onPressed:can?()=>_openScheduledSession(slot):null,child:const Text('OUVRIR'))));}),
+      for (final opened in _openSessions)
+        Card(child:ListTile(
+          leading: const Icon(Icons.lock_open_rounded, color:green),
+          title:Text(opened.label ?? _groupById(opened.groupId).name,
+            style:const TextStyle(fontWeight:FontWeight.w800)),
+          subtitle:Text('OUVERTE • ${_time(opened.openedAt)}'),
+          selected: activeSession?.id == opened.id,
+          onTap: () {
+            setState(() {
+              activeSession = opened; groupId = opened.groupId;
+              sessionOpen = true; result = null;
+            });
+            _saveAttendance();
+          },
+          trailing: FilledButton(
+            onPressed: _closingSession ? null : () async {
+              if (activeSession?.id != opened.id) {
+                setState(() { activeSession = opened; groupId = opened.groupId; sessionOpen = true; });
+              }
+              await _closeTrainingSession();
+            },
+            child:const Text('FERMER'),
+          ),
+        )),
+      ...today.map((slot) {
+        final id = '${slot['id']}-${DateTime.now().year}-${DateTime.now().month}-${DateTime.now().day}';
+        final already = sessions.any((s) => s.id == id);
+        final can = _slotCanOpen(slot) && !already;
+        return Card(child:ListTile(
+          leading:Icon(already ? Icons.check_circle_outline : Icons.schedule_rounded,
+            color:already ? green : Colors.white38),
+          title:Text(slot['label'] as String),
+          subtitle:Text('${slot['start']}–${slot['end']}'),
+          trailing:FilledButton(onPressed:can ? () => _openScheduledSession(slot) : null,
+            child:Text(already ? 'OUVERTE / TERMINÉE' : 'OUVRIR')),
+        ));
+      }),
       const SizedBox(height:14),
-      OutlinedButton.icon(onPressed:sessionOpen?null:_openManualSessionDialog,icon:const Icon(Icons.add_circle_outline_rounded),label:const Text('OUVRIR UNE SÉANCE MANUELLE'),style:OutlinedButton.styleFrom(minimumSize:const Size.fromHeight(56))),
+      OutlinedButton.icon(onPressed:_openManualSessionDialog,icon:const Icon(Icons.add_circle_outline_rounded),label:const Text('OUVRIR UNE SÉANCE MANUELLE'),style:OutlinedButton.styleFrom(minimumSize:const Size.fromHeight(56))),
       const SizedBox(height:18),
       const Text('Planning hebdomadaire',style:TextStyle(fontSize:19,fontWeight:FontWeight.w900)),
       const SizedBox(height:8),
@@ -1603,7 +1702,6 @@ class _ClubNageHomeState extends State<ClubNageHome> {
 
   void _setManualAttendance(Member member, AttendanceStatus status) {
     if (_closingSession || !_attendanceLoaded || _attendanceError != null) return;
-    _autoCloseExpiredSessionIfNeeded();
     final session = activeSession;
     if (session == null || !session.isOpen) return;
     try {
@@ -2029,9 +2127,7 @@ class _ClubNageHomeState extends State<ClubNageHome> {
             subtitle: Text(
               statsGroupId == 'all'
                   ? 'Tous les groupes'
-                  : groups
-                      .firstWhere((g) => g.id == statsGroupId)
-                      .name,
+                  : _groupById(statsGroupId).name,
             ),
             trailing: statsPeriod == 'custom'
                 ? IconButton(
@@ -2168,9 +2264,7 @@ class _ClubNageHomeState extends State<ClubNageHome> {
                   color: cyan,
                 ),
                 title: Text(
-                  groups
-                      .firstWhere((g) => g.id == session.groupId)
-                      .name,
+                  _groupById(session.groupId).name,
                   style: const TextStyle(
                     fontWeight: FontWeight.w800,
                   ),
@@ -2212,8 +2306,14 @@ class _ClubNageHomeState extends State<ClubNageHome> {
           ),
 
           const SizedBox(height: 10),
-
+          TextField(
+            decoration:const InputDecoration(prefixIcon:Icon(Icons.search),
+              labelText:'Rechercher un licencié (nom ou prénom)'),
+            onChanged:(value)=>setState(()=>_statsMemberSearch=value.trim().toLowerCase()),
+          ),
+          const SizedBox(height: 10),
           for (final member in members)
+            if (member.fullName.toLowerCase().contains(_statsMemberSearch))
             if (filteredSessions.any(
               (s) => s.expectedMemberIds.contains(member.id),
             ))
@@ -2227,29 +2327,27 @@ class _ClubNageHomeState extends State<ClubNageHome> {
   }
 
   Widget _groupSelector() {
-    if (sessionOpen && activeSession != null) {
-      return InputDecorator(
-        decoration: const InputDecoration(
-          labelText: 'Groupe / séance',
-          helperText: 'Fermez la séance pour changer de groupe',
-          prefixIcon: Icon(Icons.lock_outline),
-        ),
-        child: _coloredGroupLabel(_activeSessionLabel, fontSize: 16),
+    if (_openSessions.isNotEmpty) {
+      return DropdownButtonFormField<String>(
+        key: ValueKey(activeSession?.id),
+        initialValue: activeSession?.id,
+        decoration: const InputDecoration(labelText:'Séance active', prefixIcon:Icon(Icons.pool)),
+        items: _openSessions.map((s) => DropdownMenuItem(
+          value:s.id, child:Text(s.label ?? _groupById(s.groupId).name,
+            overflow:TextOverflow.ellipsis))).toList(),
+        onChanged:(id) {
+          final selected = _openSessions.where((s) => s.id == id).firstOrNull;
+          if (selected == null) return;
+          setState(() {activeSession=selected; groupId=selected.groupId; sessionOpen=true; result=null;});
+          _saveAttendance();
+        },
       );
     }
     return DropdownButtonFormField<String>(
-      key: ValueKey(groupId),
-      initialValue: groupId,
-      decoration: const InputDecoration(
-        labelText: 'Groupe / séance',
-        helperText: 'Sélectionnez le groupe à pointer',
-        prefixIcon: Icon(Icons.groups_outlined),
-      ),
-      items: groups.map((g) => DropdownMenuItem(value: g.id, child: Text(g.name))).toList(),
-      onChanged: (v) {
-        if (v == null || v == groupId) return;
-        setState(() { groupId = v; result = null; });
-      },
+      key: ValueKey(groupId), initialValue:groups.any((g)=>g.id==groupId) ? groupId : null,
+      decoration:const InputDecoration(labelText:'Groupe', prefixIcon:Icon(Icons.groups_outlined)),
+      items:groups.map((g)=>DropdownMenuItem(value:g.id,child:Text(g.name))).toList(),
+      onChanged:(v) {if(v!=null)setState(() {groupId=v;result=null;});},
     );
   }
 
@@ -2279,6 +2377,26 @@ class _ClubNageHomeState extends State<ClubNageHome> {
       if (mounted) setState(() => _syncingKdrive = false);
     }
   }
+
+  Widget _cloudPage() => ListView(
+    padding: const EdgeInsets.all(16),
+    children: [
+      const Text('Synchronisation kDrive', style:TextStyle(fontSize:24,fontWeight:FontWeight.w900)),
+      const SizedBox(height:8),
+      const Text('Les pointages sont conservés localement jusqu’à leur envoi. Vérifiez le résultat après chaque synchronisation.'),
+      const SizedBox(height:16),
+      _syncCard(),
+      const SizedBox(height:12),
+      OutlinedButton.icon(
+        onPressed:() async {
+          await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const V7ImportScreen()));
+          if (mounted) await _restoreRoster();
+        },
+        icon:const Icon(Icons.cloud_download_outlined),
+        label:const Text('IMPORTER LES LICENCIÉS'),
+      ),
+    ],
+  );
 
   Widget _syncCard() => Card(child: Padding(
     padding: const EdgeInsets.all(12),
@@ -2322,8 +2440,12 @@ class _ClubNageHomeState extends State<ClubNageHome> {
   }
 
   String _groupNames(List<String> ids) => ids.map((id) => _groupById(id).name).join(' • ');
-  TrainingGroup _groupById(String id) => groups.firstWhere((g) => g.id == id);
-  Member _memberById(String id) => members.firstWhere((m) => m.id == id);
+  TrainingGroup _groupById(String id) {
+    for (final g in groups) { if (g.id == id) return g; }
+    for (final g in groups) { if (GroupEligibility.anyMatch([g.id], [id])) return g; }
+    return TrainingGroup(id, id, 'Selon planning', '—', '—');
+  }
+  Member _memberById(String id) => members.firstWhere((m) => m.id == id, orElse: () => Member(id:id,firstName:'Licencié',lastName:id,groups:const [],nfcUid:'',qrToken:''));
   String _time(DateTime d) => '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
 }
 
