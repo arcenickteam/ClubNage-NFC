@@ -197,7 +197,7 @@ class _ClubNageHomeState extends State<ClubNageHome> with WidgetsBindingObserver
   DateTime _at(DateTime d,String t){final p=t.split(':');return DateTime(d.year,d.month,d.day,int.parse(p[0]),int.parse(p[1]));}
   List<Map<String,Object>> get _todaySlots => _weeklySlots.where((s)=>s['weekday']==DateTime.now().weekday).toList();
   List<String> _slotGroups(Map<String,Object> s)=>List<String>.from(s['groups'] as List);
-  bool _slotCanOpen(Map<String,Object> s){final n=DateTime.now(),st=_at(n,s['start'] as String),en=_at(n,s['end'] as String);return !n.isBefore(st.subtract(const Duration(minutes:30)))&&n.isBefore(st.add(const Duration(hours:4)));}
+  bool _slotCanOpen(Map<String,Object> s){final n=DateTime.now(),st=_at(n,s['start'] as String);return !n.isBefore(st.subtract(const Duration(minutes:30)))&&n.isBefore(st.add(const Duration(hours:4)));}
   List<Member> _membersForGroups(List<String> ids)=>members.where((m)=>GroupEligibility.anyMatch(m.groups, ids)).toList();
 
   void _openScheduledSession(Map<String,Object> slot){
