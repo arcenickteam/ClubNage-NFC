@@ -12,8 +12,8 @@ class InfomaniakKdriveService {
   static const redirectUri = 'fr.montchanin.clubnage:/oauth2redirect';
   static const driveId = 3455819;
   static const folderCandidateId = 215;
-  static const membersName = 'ClubNage_Base_licencies_26-27_V4.xlsx';
-  static const scheduleName = 'ClubNage_Suivi_activite_26-27_V4.xlsx';
+  static const membersName = 'ClubNage_Base_licencies_26-27.xlsx';
+  static const scheduleName = 'ClubNage_Suivi_activite_26-27.xlsx';
 
   static const _authorizationEndpoint = 'https://login.infomaniak.com/authorize';
   static const _tokenEndpoint = 'https://login.infomaniak.com/token';
