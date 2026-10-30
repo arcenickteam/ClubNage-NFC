@@ -12,6 +12,7 @@ import 'services/local_roster_store.dart';
 import 'services/group_eligibility.dart';
 import 'services/infomaniak_kdrive_service.dart';
 import 'services/kdrive_attendance_sync.dart';
+import 'services/kdrive_badge_sync.dart';
 
 const navy = Color(0xFF071A2B);
 const panel = Color(0xFF0D263B);
@@ -395,6 +396,7 @@ class _ClubNageHomeState extends State<ClubNageHome> with WidgetsBindingObserver
     final other = _memberForUid(normalized, excludeId: member.id);
     if (other != null) return 'Ce badge est déjà associé à ${other.fullName}.';
     final prefs = await SharedPreferences.getInstance();
+    await KdriveBadgeSync.queueAssignment(member, normalized);
     await prefs.setString('uid_${member.id}', normalized);
     if (mounted) setState(() => assignedUids[member.id] = normalized);
     return null;
@@ -2343,11 +2345,26 @@ class _ClubNageHomeState extends State<ClubNageHome> with WidgetsBindingObserver
       await _pendingAttendanceSave;
       final saveError = _attendanceError;
       if (saveError != null) throw StateError(saveError);
+      // Les affectations sont envoyées et relues avant les pointages.
+      // En cas de conflit, les données locales sont conservées et l'envoi est arrêté.
+      final sharedBadges = await KdriveBadgeSync(InfomaniakKdriveService())
+          .synchronize(List.of(members));
+      final prefs = await SharedPreferences.getInstance();
+      for (final m in members) {
+        final uid = sharedBadges[m.id];
+        if (uid == null) {
+          await prefs.remove('uid_${m.id}');
+        } else {
+          await prefs.setString('uid_${m.id}', uid);
+        }
+      }
+      if (mounted) setState(() {
+        assignedUids..clear()..addAll(sharedBadges);
+      });
       final count = await KdriveAttendanceSync(InfomaniakKdriveService()).synchronize(
         records: List.of(records), sessions: List.of(sessions), members: List.of(members));
-      if (mounted) setState(() => _kdriveSyncMessage = count == 0
-          ? 'Aucun pointage nouveau ou modifié à transmettre.'
-          : '$count pointage(s) confirmé(s) dans Excel sur kDrive.');
+      if (mounted) setState(() => _kdriveSyncMessage =
+          '${sharedBadges.length} badge(s) partagés, $count pointage(s) transmis.');
     } catch (e) {
       if (mounted) setState(() => _kdriveSyncMessage = 'Échec / vérification nécessaire : $e');
     } finally {
@@ -2388,7 +2405,7 @@ class _ClubNageHomeState extends State<ClubNageHome> with WidgetsBindingObserver
       FilledButton.icon(
         onPressed: _syncingKdrive ? null : _syncAttendanceToKdrive,
         icon: Icon(_syncingKdrive ? Icons.hourglass_top : Icons.cloud_upload_outlined),
-        label: Text(_syncingKdrive ? 'Synchronisation…' : 'SYNCHRONISER LES PRÉSENCES'),
+        label: Text(_syncingKdrive ? 'Synchronisation…' : 'SYNCHRONISER BADGES ET PRÉSENCES'),
       ),
     ]),
   ));
