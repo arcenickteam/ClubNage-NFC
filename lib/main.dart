@@ -99,31 +99,8 @@ class _ClubNageHomeState extends State<ClubNageHome> with WidgetsBindingObserver
     TrainingGroup('aqua', 'Aquaforme / Aquafitness', 'Planning hebdomadaire', '10:00', '11:00'),
   ];
 
-  final _demoMembers = const [
-    Member(id: 'M2001', firstName: 'Laura', lastName: 'Jordan', groups: ['benjamins'], nfcUid: '', qrToken: 'CN:M2001', dossierStatus: 'Validé', email: 'annelaure.jordan@free.fr', phone: '06 82 79 58 94', dateOfBirth: '15/01/2014', legalRepresentative: 'JORDAN Anne Laure'),
-    Member(id: 'M2002', firstName: 'Klara', lastName: 'Thomas', groups: ['benjamins'], nfcUid: '', qrToken: 'CN:M2002', dossierStatus: 'Validé', email: 'thomasklara791@gmail.com   karine.thomas18@orange.fr fabien.thomas71@laposte.net', phone: '0660475763 0608279557', dateOfBirth: '10/06/2013', legalRepresentative: 'THOMAS KARINE THOMAS FABIEN'),
-    Member(id: 'M2003', firstName: 'Selma', lastName: 'Lagrimi', groups: ['avenirs'], nfcUid: '', qrToken: 'CN:M2003', dossierStatus: 'À compléter', email: 'celine.lagrimi@yahoo.com', phone: '06 07 66 26 26', dateOfBirth: '23/03/2017', legalRepresentative: ''),
-    Member(id: 'M2004', firstName: 'Noémie', lastName: 'Seguin', groups: ['avenirs'], nfcUid: '', qrToken: 'CN:M2004', dossierStatus: 'Validé', email: 'davidseguin@orange.fr', phone: '06 84 01 51 42', dateOfBirth: '11/12/2017', legalRepresentative: 'SEGUIN DAVID'),
-    Member(id: 'M2005', firstName: 'Anna', lastName: 'Lance', groups: ['avenirs'], nfcUid: '', qrToken: 'CN:M2005', dossierStatus: 'Validé', email: 'fxcharlotte@gmail.com', phone: '06 63 98 29 39', dateOfBirth: '01/02/2017', legalRepresentative: 'LANCE François-Xavier'),
-    Member(id: 'M2006', firstName: 'Rose', lastName: 'Proby', groups: ['benjamins'], nfcUid: '', qrToken: 'CN:M2006', dossierStatus: 'Validé', email: 'claire.proby@gmail.com', phone: '06 72 48 56 30', dateOfBirth: '07/12/2012', legalRepresentative: 'PROBY CLAIRE'),
-    Member(id: 'M2007', firstName: 'Tom', lastName: 'Proby', groups: ['avenirs'], nfcUid: '', qrToken: 'CN:M2007', dossierStatus: 'Validé', email: 'claire.proby@gmail.com', phone: '06 72 48 56 30', dateOfBirth: '20/06/2016', legalRepresentative: 'PROBY CLAIRE'),
-    Member(id: 'M2008', firstName: 'Charly', lastName: 'Proby', groups: ['benjamins'], nfcUid: '', qrToken: 'CN:M2008', dossierStatus: 'Validé', email: 'claire.proby@gmail.com', phone: '06 72 48 56 30', dateOfBirth: '04/03/2014', legalRepresentative: 'PROBY CLAIRE'),
-    Member(id: 'M2009', firstName: 'Louis', lastName: 'Bernigaud', groups: ['juniors'], nfcUid: '', qrToken: 'CN:M2009', dossierStatus: 'Validé', email: 'louisbngd@gmail.com', phone: '0769853019', dateOfBirth: '26/04/2010', legalRepresentative: 'David Bernigaud'),
-    Member(id: 'M2010', firstName: 'Baptiste', lastName: 'Oliana', groups: ['juniors'], nfcUid: '', qrToken: 'CN:M2010', dossierStatus: 'Validé', email: 'baptoli2005@gmail.com', phone: '0769758320', dateOfBirth: '28/07/2005', legalRepresentative: ''),
-    Member(id: 'M2011', firstName: 'Abel', lastName: 'Marques', groups: ['avenirs'], nfcUid: '', qrToken: 'CN:M2011', dossierStatus: 'À compléter', email: 'severine.skubala@hotmail.fr', phone: '0608237330', dateOfBirth: '15/06/2016', legalRepresentative: ''),
-    Member(id: 'M2012', firstName: 'Manon', lastName: 'Laupretre', groups: ['benjamins'], nfcUid: '', qrToken: 'CN:M2012', dossierStatus: 'Validé', email: 'finfinefleur@yahoo.fr', phone: '0684183242 0785138520', dateOfBirth: '03/10/2014', legalRepresentative: 'Delphine LAUPRETRE'),
-    Member(id: 'M2013', firstName: 'Julia', lastName: 'Hublart', groups: ['avenirs'], nfcUid: '', qrToken: 'CN:M2013', dossierStatus: 'À compléter', email: 'fabhublart@yahoo.fr', phone: '0627570356', dateOfBirth: '10/11/2015', legalRepresentative: ''),
-    Member(id: 'M2014', firstName: 'Yanis', lastName: 'Repy', groups: ['juniors'], nfcUid: '', qrToken: 'CN:M2014', dossierStatus: 'Validé', email: 'yanisrepy@gmail.com hayet71@hotmail.com', phone: '0763160686 0687703527 Hayet', dateOfBirth: '04/06/2013', legalRepresentative: 'FERHI MOJRANE'),
-    Member(id: 'M2015', firstName: 'Nathan', lastName: 'Chauvy', groups: ['juniors'], nfcUid: '', qrToken: 'CN:M2015', dossierStatus: 'Validé', email: 'deborahheritier@hotmail.fr', phone: '07 66 75 77 08', dateOfBirth: '20/05/2013', legalRepresentative: 'DEBORAH HERITIER'),
-    Member(id: 'M2016', firstName: 'Emma', lastName: 'Kermabon', groups: ['benjamins'], nfcUid: '', qrToken: 'CN:M2016', dossierStatus: 'Validé', email: 'jerome.kermabon@gmail.com', phone: '0674633717 Emma 0631515043 Jerome', dateOfBirth: '03/08/2014', legalRepresentative: 'JEROME KERMABON'),
-    Member(id: 'M2017', firstName: 'Lola', lastName: 'Kermabon', groups: ['juniors'], nfcUid: '', qrToken: 'CN:M2017', dossierStatus: 'Validé', email: 'karmabonlola@gmail.com', phone: '0607490979', dateOfBirth: '02/12/2008', legalRepresentative: 'JEROME KERMABON'),
-    Member(id: 'M2018', firstName: 'Max', lastName: 'Richard', groups: ['juniors'], nfcUid: '', qrToken: 'CN:M2018', dossierStatus: 'Validé', email: 'faiza_redjdal@yahoo.fr', phone: '0761920620', dateOfBirth: '17/07/2012', legalRepresentative: 'FAIZA REDJDAL'),
-    Member(id: 'M2019', firstName: 'Farrah', lastName: 'Richard', groups: ['juniors'], nfcUid: '', qrToken: 'CN:M2019', dossierStatus: 'Validé', email: 'fafarich2010@gmail.com', phone: '0763584373', dateOfBirth: '27/10/2020', legalRepresentative: 'FAIZA REDJDAL'),
-    Member(id: 'M2020', firstName: 'Paul', lastName: 'Frizot', groups: ['juniors'], nfcUid: '', qrToken: 'CN:M2020', dossierStatus: 'Validé', email: 'collard.aude@laposte.net', phone: '0687072637', dateOfBirth: '08/03/2012', legalRepresentative: 'FRIZOT GUILLAUME'),
-    Member(id: 'M2021', firstName: 'Marie', lastName: 'Jacquet', groups: ['benjamins'], nfcUid: '', qrToken: 'CN:M2021', dossierStatus: 'Validé', email: 'chacoco.jacquet@gmail.com', phone: '0669567766', dateOfBirth: '21/11/2013', legalRepresentative: ''),
-    Member(id: 'M2022', firstName: 'Meissan', lastName: 'Kheddir', groups: ['benjamins'], nfcUid: '', qrToken: 'CN:M2022', dossierStatus: 'À compléter', email: 'hamidameissan@gmail.com', phone: '0605902735', dateOfBirth: '16/11/2014', legalRepresentative: ''),
-  ];
-
+  // V7.13 : aucun licencié fictif injecté lorsque le référentiel est absent.
+  final List<Member> _demoMembers = const <Member>[];
 
   List<Member> _importedMembers = [];
   bool _rosterImported = false;

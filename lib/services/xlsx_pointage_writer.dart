@@ -38,7 +38,15 @@ class XlsxPointageWriter {
       if (b == null) throw FormatException('Composant XLSX absent : $path');
       return utf8.decode(b);
     }
-    final workbook = XmlDocument.parse(read('xl/workbook.xml'));
+    // Corrige un ancien classeur où r:id était présent sans déclaration xmlns:r.
+    // La déclaration est posée AVANT l'analyse et la modification du document.
+    var workbookXml = read('xl/workbook.xml');
+    if (!workbookXml.contains('xmlns:r=')) {
+      workbookXml = workbookXml.replaceFirst(
+        '<workbook ', '<workbook xmlns:r="$_relNs" ',
+      );
+    }
+    final workbook = XmlDocument.parse(workbookXml);
     final rels = XmlDocument.parse(read('xl/_rels/workbook.xml.rels'));
     final contentTypes = XmlDocument.parse(read('[Content_Types].xml'));
     final existing = workbook.descendants.whereType<XmlElement>().where(
@@ -113,12 +121,7 @@ class XlsxPointageWriter {
         XmlAttribute(XmlName('PartName'), '/$sheetPath'),
         XmlAttribute(XmlName('ContentType'), 'application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml'),
       ]));
-      // Garantit le préfixe r utilisé dans le nouvel élément sheet.
-      var workText = workbook.toXmlString();
-      if (!workText.contains('xmlns:r=')) {
-        workText = workText.replaceFirst('<workbook ', '<workbook xmlns:r="$_relNs" ');
-      }
-      parts['xl/workbook.xml'] = utf8.encode(workText);
+      parts['xl/workbook.xml'] = utf8.encode(workbook.toXmlString());
       parts['xl/_rels/workbook.xml.rels'] = utf8.encode(rels.toXmlString());
       parts['[Content_Types].xml'] = utf8.encode(contentTypes.toXmlString());
     } else {
