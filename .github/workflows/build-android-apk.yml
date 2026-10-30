@@ -3,7 +3,7 @@ name: Club MN NFC - Android APK
 on:
   workflow_dispatch:
   push:
-    branches: [ "main", "v6", "v7" ]
+    branches: [ "main", "v6", "v7", "v7.13-corrections" ]
 
 jobs:
   build-apk:
