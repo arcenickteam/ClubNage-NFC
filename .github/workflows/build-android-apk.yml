@@ -85,10 +85,22 @@ jobs:
             grep -n -C 8 -E 'AuthorizationManagementActivity|RedirectUriReceiverActivity|MainActivity|appAuthRedirectScheme|taskAffinity|launchMode' "$f" || true
           done
 
+      - name: Nommer l'APK selon la version
+        shell: bash
+        run: |
+          VERSION=$(echo "${GITHUB_REF_NAME}" | grep -oE 'v[0-9]+[.][0-9]+' | head -1)
+          if [ -z "$VERSION" ]; then
+            echo "ERREUR : version introuvable dans la branche"
+            exit 1
+          fi
+          VERSION="V${VERSION#v}"
+          echo "APK_VERSION=$VERSION" >> "$GITHUB_ENV"
+          cp build/app/outputs/flutter-apk/app-release.apk "build/app/outputs/flutter-apk/ClubNage-NFC_${VERSION}.apk"
+
       - name: Publier l'APK
         uses: actions/upload-artifact@v4
         with:
-          name: Club-MN-NFC-V7-Android
-          path: build/app/outputs/flutter-apk/app-release.apk
+          name: ClubNage-NFC_${{ env.APK_VERSION }}
+          path: build/app/outputs/flutter-apk/ClubNage-NFC_*.apk
           if-no-files-found: error
           retention-days: 30
