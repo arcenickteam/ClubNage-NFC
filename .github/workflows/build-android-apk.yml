@@ -66,11 +66,20 @@ jobs:
               raise SystemExit(f'Module OAuth introuvable : {files}')
           p = files[0]
           s = p.read_text()
-          updated, n = re.subn(r'compileSdkVersion\s+33', 'compileSdkVersion 36', s, count=1)
-          if n != 1:
-              raise SystemExit('SDK 33 introuvable : ' + str(p))
-          p.write_text(updated)
-          print('SDK OAuth corrigé')
+          patterns = [
+              r'compileSdkVersion\\s+33\\b',
+              r'compileSdk\\s*(?:=|\\s)\\s*33\\b',
+          ]
+          updated = s
+          for pattern in patterns:
+              updated, n = re.subn(pattern, 'compileSdk 36', updated, count=1)
+              if n:
+                  break
+          if updated != s:
+              p.write_text(updated)
+              print('SDK OAuth corrigé vers 36')
+          else:
+              print('Aucune déclaration SDK 33 à remplacer ; configuration conservée')
           PATCH
 
       - name: Construire l'APK de test
