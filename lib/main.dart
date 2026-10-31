@@ -2379,32 +2379,56 @@ class _ClubNageHomeState extends State<ClubNageHome> with WidgetsBindingObserver
   Future<void> _syncAttendanceToKdrive() async {
     if (_syncingKdrive || !_attendanceLoaded || _attendanceError != null) return;
     setState(() { _syncingKdrive = true; _kdriveSyncMessage = 'Synchronisation en cours…'; });
+    final messages = <String>[];
     try {
       await _pendingAttendanceSave;
       final saveError = _attendanceError;
       if (saveError != null) throw StateError(saveError);
-      // Les affectations sont envoyées et relues avant les pointages.
-      // En cas de conflit, les données locales sont conservées et l'envoi est arrêté.
-      final sharedBadges = await KdriveBadgeSync(InfomaniakKdriveService())
-          .synchronize(List.of(members));
-      final prefs = await SharedPreferences.getInstance();
-      for (final m in members) {
-        final uid = sharedBadges[m.id];
-        if (uid == null) {
-          await prefs.remove('uid_${m.id}');
-        } else {
-          await prefs.setString('uid_${m.id}', uid);
+
+      // Les deux opérations sont indépendantes : un conflit NFC ne bloque
+      // jamais l'envoi des pointages.
+      try {
+        final badges = await KdriveBadgeSync(InfomaniakKdriveService())
+            .synchronize(List.of(members));
+        final prefs = await SharedPreferences.getInstance();
+        // Les affectations confirmées sur kDrive font autorité sur ce téléphone.
+        // Les conflits locaux restent dans le journal en attente de résolution.
+        for (final m in members) {
+          final uid = badges.sharedBadges[m.id];
+          if (uid == null) {
+            await prefs.remove('uid_${m.id}');
+          } else {
+            await prefs.setString('uid_${m.id}', uid);
+          }
         }
+        if (mounted) setState(() {
+          assignedUids..clear()..addAll(badges.sharedBadges);
+        });
+        messages.add('Badges : ${badges.sharedBadges.length} partagés, '
+            '${badges.uploaded} nouveau(x) envoyé(s).');
+        if (badges.conflicts.isNotEmpty) {
+          messages.add('Conflits (${badges.conflicts.length}) : '
+              '${badges.conflicts.join(' ; ')}');
+        }
+        if (badges.pending > 0) {
+          messages.add('${badges.pending} affectation(s) locale(s) en attente.');
+        }
+      } catch (e) {
+        messages.add('Badges : échec, données locales conservées : $e');
       }
-      if (mounted) setState(() {
-        assignedUids..clear()..addAll(sharedBadges);
-      });
-      final count = await KdriveAttendanceSync(InfomaniakKdriveService()).synchronize(
-        records: List.of(records), sessions: List.of(sessions), members: List.of(members));
-      if (mounted) setState(() => _kdriveSyncMessage =
-          '${sharedBadges.length} badge(s) partagés, $count pointage(s) transmis.');
+
+      try {
+        final count = await KdriveAttendanceSync(InfomaniakKdriveService())
+            .synchronize(records: List.of(records),
+                sessions: List.of(sessions), members: List.of(members));
+        messages.add('Présences : $count pointage(s) transmis.');
+      } catch (e) {
+        messages.add('Présences : échec, pointages locaux conservés : $e');
+      }
+      if (mounted) setState(() => _kdriveSyncMessage = messages.join('\n'));
     } catch (e) {
-      if (mounted) setState(() => _kdriveSyncMessage = 'Échec / vérification nécessaire : $e');
+      if (mounted) setState(() => _kdriveSyncMessage =
+          'Synchronisation interrompue : $e');
     } finally {
       if (mounted) setState(() => _syncingKdrive = false);
     }
