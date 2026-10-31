@@ -67,19 +67,18 @@ jobs:
           p = files[0]
           s = p.read_text()
           patterns = [
-              r'compileSdkVersion\\s+33\\b',
-              r'compileSdk\\s*(?:=|\\s)\\s*33\\b',
+              r'compileSdkVersion\s+33\b',
+              r'compileSdk\s*(?:=\s*)?33\b',
           ]
           updated = s
           for pattern in patterns:
               updated, n = re.subn(pattern, 'compileSdk 36', updated, count=1)
               if n:
                   break
-          if updated != s:
-              p.write_text(updated)
-              print('SDK OAuth corrigé vers 36')
-          else:
-              print('Aucune déclaration SDK 33 à remplacer ; configuration conservée')
+          if updated == s:
+              raise SystemExit('SDK 33 introuvable dans flutter_appauth : vérifier la configuration Gradle')
+          p.write_text(updated)
+          print('SDK OAuth corrigé vers 36')
           PATCH
 
       - name: Construire l'APK de test
