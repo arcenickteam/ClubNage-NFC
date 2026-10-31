@@ -54,7 +54,9 @@ class KdriveAttendanceSync {
         session?.label ?? record.groupId, record.groupId,
         record.sessionId ?? '', record.method, 'ClubNage Android', syncDate,
         record.status == AttendanceStatus.absent ? 'Absent' :
-            record.status == AttendanceStatus.late ? 'Retard' : 'Présent',
+            record.status == AttendanceStatus.late
+                ? (record.isExceptional ? 'Retard exceptionnel' : 'Retard')
+                : (record.isExceptional ? 'Présent exceptionnel' : 'Présent'),
       ];
       final previous = oldRows[id];
       if (previous == null || !samePointage(previous, row)) newRows.add(row);

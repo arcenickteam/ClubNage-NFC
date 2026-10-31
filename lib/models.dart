@@ -13,6 +13,7 @@ class Member {
   final String category;
   final String session1;
   final String session2;
+  final String authorizedSlots;
   final String level;
   final String city;
   final String guardianPhone;
@@ -32,6 +33,7 @@ class Member {
     this.category = '',
     this.session1 = '',
     this.session2 = '',
+    this.authorizedSlots = '',
     this.level = '',
     this.city = '',
     this.guardianPhone = '',
@@ -138,7 +140,7 @@ class AttendanceRecord {
   final DateTime timestamp;
   final AttendanceStatus status;
   final String method;
-
+  final bool isExceptional;
   const AttendanceRecord({
     required this.memberId,
     required this.groupId,
@@ -146,5 +148,6 @@ class AttendanceRecord {
     required this.timestamp,
     required this.status,
     required this.method,
+    this.isExceptional = false,
   });
 }

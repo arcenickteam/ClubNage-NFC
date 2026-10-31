@@ -9,6 +9,7 @@ import 'v7_import_screen.dart';
 import 'services/nfc_service.dart';
 import 'services/local_attendance_store.dart';
 import 'services/local_roster_store.dart';
+import 'services/slot_authorization.dart';
 import 'services/group_eligibility.dart';
 import 'services/infomaniak_kdrive_service.dart';
 import 'services/kdrive_attendance_sync.dart';
@@ -142,33 +143,28 @@ class _ClubNageHomeState extends State<ClubNageHome> with WidgetsBindingObserver
 
 
 
+  // Uniquement les lignes « Validé » de l’onglet « Créneaux connus » (V8).
+  // Les créneaux Aqua et Jaune à confirmer restent accessibles en manuel.
   static const _weeklySlots = <Map<String, Object>>[
-    {'id':'jun-lun','label':'Compétition Juniors','groups':['juniors'],'weekday':1,'start':'18:45','end':'20:30'},
-    {'id':'jun-mar','label':'Compétition Juniors','groups':['juniors'],'weekday':2,'start':'19:15','end':'20:45'},
-    {'id':'jun-mer','label':'Compétition Juniors – préparation physique','groups':['juniors'],'weekday':3,'start':'15:00','end':'16:15'},
-    {'id':'jun-jeu','label':'Compétition Juniors','groups':['juniors'],'weekday':4,'start':'18:30','end':'20:15'},
-    {'id':'jun-ven','label':'Compétition Juniors','groups':['juniors'],'weekday':5,'start':'18:30','end':'20:00'},
-    {'id':'jun-sam','label':'Compétition Juniors','groups':['juniors'],'weekday':6,'start':'12:00','end':'13:15'},
-    {'id':'ben-lun','label':'Compétition Benjamins','groups':['benjamins'],'weekday':1,'start':'18:00','end':'19:30'},
-    {'id':'ben-mar','label':'Compétition Benjamins','groups':['benjamins'],'weekday':2,'start':'19:15','end':'20:15'},
-    {'id':'ben-jeu','label':'Compétition Benjamins','groups':['benjamins'],'weekday':4,'start':'18:15','end':'19:30'},
-    {'id':'ben-ven','label':'Compétition Benjamins','groups':['benjamins'],'weekday':5,'start':'18:30','end':'20:00'},
-    {'id':'av-lun','label':'Compétition Avenirs','groups':['avenirs'],'weekday':1,'start':'18:00','end':'19:00'},
-    {'id':'av-mer','label':'Compétition Avenirs','groups':['avenirs'],'weekday':3,'start':'13:30','end':'14:45'},
-    {'id':'av-ven','label':'Compétition Avenirs','groups':['avenirs'],'weekday':5,'start':'17:30','end':'18:30'},
-    {'id':'conf-mar','label':'Confirmés – Rouge / Violet / Bleu / Vert','groups':['rouge','violet','bleu','vert'],'weekday':2,'start':'18:15','end':'19:15'},
-    {'id':'conf-sam','label':'Confirmés – Rouge / Violet / Bleu / Vert','groups':['rouge','violet','bleu','vert'],'weekday':6,'start':'11:00','end':'12:00'},
-    {'id':'jaune-mer','label':'Débutants – Jaune','groups':['jaune'],'weekday':3,'start':'11:00','end':'11:45'},
-    {'id':'jaune-sam1','label':'Débutants – Jaune (créneau 1)','groups':['jaune'],'weekday':6,'start':'09:30','end':'10:15'},
-    {'id':'jaune-sam2','label':'Débutants – Jaune (créneau 2)','groups':['jaune'],'weekday':6,'start':'10:15','end':'11:00'},
-    {'id':'adult-lun-midi','label':'Adultes 18 ans et +','groups':['adultes'],'weekday':1,'start':'12:00','end':'13:00'},
-    {'id':'adult-lun-soir','label':'Adultes 18 ans et +','groups':['adultes'],'weekday':1,'start':'19:30','end':'20:30'},
-    {'id':'adult-jeu-midi','label':'Adultes 18 ans et +','groups':['adultes'],'weekday':4,'start':'12:00','end':'13:00'},
-    {'id':'adult-jeu-soir','label':'Adultes 18 ans et +','groups':['adultes'],'weekday':4,'start':'19:30','end':'20:30'},
-    {'id':'aqua-mer-10','label':'Aquaforme','groups':['aqua'],'weekday':3,'start':'10:00','end':'11:00'},
-    {'id':'aqua-mer-1230','label':'Aquaforme','groups':['aqua'],'weekday':3,'start':'12:30','end':'13:30'},
-    {'id':'aqua-ven','label':'Aquaforme','groups':['aqua'],'weekday':5,'start':'20:00','end':'21:00'},
-    {'id':'aqua-sam','label':'Aquafitness','groups':['aqua'],'weekday':6,'start':'09:00','end':'09:30'},
+    {'id':'v8-jun-1-1845', 'label':'Junior', 'groups':['Junior'], 'weekday':1, 'start':'18:45', 'end':'20:30'},
+    {'id':'v8-jun-2-1915', 'label':'Junior', 'groups':['Junior'], 'weekday':2, 'start':'19:15', 'end':'20:45'},
+    {'id':'v8-jun-3-1500', 'label':'Junior', 'groups':['Junior'], 'weekday':3, 'start':'15:00', 'end':'16:15'},
+    {'id':'v8-jun-4-1830', 'label':'Junior', 'groups':['Junior'], 'weekday':4, 'start':'18:30', 'end':'20:15'},
+    {'id':'v8-jun-5-1830', 'label':'Junior', 'groups':['Junior'], 'weekday':5, 'start':'18:30', 'end':'20:00'},
+    {'id':'v8-jun-6-1200', 'label':'Junior', 'groups':['Junior'], 'weekday':6, 'start':'12:00', 'end':'13:15'},
+    {'id':'v8-ben-1-1800', 'label':'Benjamin', 'groups':['Benjamin'], 'weekday':1, 'start':'18:00', 'end':'19:30'},
+    {'id':'v8-ben-2-1915', 'label':'Benjamin', 'groups':['Benjamin'], 'weekday':2, 'start':'19:15', 'end':'20:15'},
+    {'id':'v8-ben-4-1815', 'label':'Benjamin', 'groups':['Benjamin'], 'weekday':4, 'start':'18:15', 'end':'19:30'},
+    {'id':'v8-ben-5-1830', 'label':'Benjamin', 'groups':['Benjamin'], 'weekday':5, 'start':'18:30', 'end':'20:00'},
+    {'id':'v8-av-1-1800', 'label':'Avenir', 'groups':['Avenir'], 'weekday':1, 'start':'18:00', 'end':'19:00'},
+    {'id':'v8-av-3-1330', 'label':'Avenir', 'groups':['Avenir'], 'weekday':3, 'start':'13:30', 'end':'14:45'},
+    {'id':'v8-av-5-1730', 'label':'Avenir', 'groups':['Avenir'], 'weekday':5, 'start':'17:30', 'end':'18:30'},
+    {'id':'v8-rvbv-2-1815', 'label':'RVBV', 'groups':['RVBV'], 'weekday':2, 'start':'18:15', 'end':'19:15'},
+    {'id':'v8-rvbv-6-1100', 'label':'RVBV', 'groups':['RVBV'], 'weekday':6, 'start':'11:00', 'end':'12:00'},
+    {'id':'v8-adult-1-1200', 'label':'Adultes', 'groups':['Adultes'], 'weekday':1, 'start':'12:00', 'end':'13:00'},
+    {'id':'v8-adult-1-1930', 'label':'Adultes', 'groups':['Adultes'], 'weekday':1, 'start':'19:30', 'end':'20:30'},
+    {'id':'v8-adult-4-1200', 'label':'Adultes', 'groups':['Adultes'], 'weekday':4, 'start':'12:00', 'end':'13:00'},
+    {'id':'v8-adult-4-1930', 'label':'Adultes', 'groups':['Adultes'], 'weekday':4, 'start':'19:30', 'end':'20:30'},
   ];
 
   String _dayName(int w) => const ['', 'Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi','Dimanche'][w];
@@ -176,7 +172,8 @@ class _ClubNageHomeState extends State<ClubNageHome> with WidgetsBindingObserver
   List<Map<String,Object>> get _todaySlots => _weeklySlots.where((s)=>s['weekday']==DateTime.now().weekday).toList();
   List<String> _slotGroups(Map<String,Object> s)=>List<String>.from(s['groups'] as List);
   bool _slotCanOpen(Map<String,Object> s){final n=DateTime.now(),st=_at(n,s['start'] as String);return !n.isBefore(st.subtract(const Duration(minutes:30)))&&n.isBefore(st.add(const Duration(hours:4)));}
-  List<Member> _membersForGroups(List<String> ids)=>members.where((m)=>GroupEligibility.anyMatch(m.groups, ids)).toList();
+  List<Member> _membersForGroups(List<String> ids) => members.where((m) =>
+      ids.any((id) => SlotAuthorization.explicitlyAllowed(m, id))).toList();
 
   void _openScheduledSession(Map<String,Object> slot){
     if (!_attendanceLoaded || _attendanceError != null) return;
@@ -209,8 +206,8 @@ class _ClubNageHomeState extends State<ClubNageHome> with WidgetsBindingObserver
       actions:[TextButton(onPressed:()=>Navigator.pop(dc,false),child:const Text('ANNULER')),FilledButton(onPressed:()=>Navigator.pop(dc,true),child:const Text('OUVRIR'))],
     )));
     if(ok!=true||!mounted)return;
-    final n=DateTime.now(),exp=members.where((m)=>GroupEligibility.anyMatch(m.groups, [selectedGroup])).toList();
-    final s=TrainingSession(id:'manual-${n.millisecondsSinceEpoch}',groupId:selectedGroup,date:DateTime(n.year,n.month,n.day),openedAt:n,expectedMemberIds:List.unmodifiable(exp.map((m)=>m.id)),label:type,startTime:n,endTime:n,eligibleGroupIds:[selectedGroup],manualType:type,excludeFromStats:type=='Test badge');
+    final n=DateTime.now(),exp=_membersForGroups([selectedGroup]);
+    final s=TrainingSession(id:'manual-${n.millisecondsSinceEpoch}',groupId:selectedGroup,date:DateTime(n.year,n.month,n.day),openedAt:n,expectedMemberIds:List.unmodifiable(exp.map((m)=>m.id)),label:'$selectedGroup · $type',startTime:n,endTime:n,eligibleGroupIds:[selectedGroup],manualType:type,excludeFromStats:type=='Test badge');
     setState((){sessions.add(s);activeSession=s;groupId=selectedGroup;sessionOpen=true;result=null;});
     _saveAttendance();
   }
@@ -564,9 +561,24 @@ class _ClubNageHomeState extends State<ClubNageHome> with WidgetsBindingObserver
       setState(() => result = AttendanceResult(status: AttendanceStatus.unknown, title: 'Licencié inconnu', message: '$method non associé à un licencié.', uid: identifier));
       return;
     }
-    final eligible=activeSession!.eligibleGroupIds.isEmpty?[groupId]:activeSession!.eligibleGroupIds;
-    if (!GroupEligibility.anyMatch(member.groups, eligible)) {
-      setState(() => result = AttendanceResult(status: AttendanceStatus.denied, title: 'Mauvais groupe', message: '${member!.fullName} n’est pas inscrit à cette séance.', member: member, uid: identifier));
+    // Le groupId correspond au créneau officiel, contrairement au libellé
+    // d'affichage qui peut contenir le type de séance manuelle.
+    final slotName = activeSession!.groupId;
+    final permission = SlotAuthorization.permission(member, slotName);
+
+    if (permission == SlotPermission.denied) {
+      setState(() => result = AttendanceResult(
+        status: AttendanceStatus.denied,
+        title: 'Créneau non autorisé',
+        message: '${member!.fullName} n’est pas autorisé à participer à cette séance.',
+        member: member,
+        uid: identifier,
+      ));
+      return;
+    }
+
+    if (permission == SlotPermission.sameFamilyException) {
+      _confirmExceptionalAttendance(member, identifier, method, activeSession!.id);
       return;
     }
     if (currentRecords.any((r) => r.memberId == member!.id && r.status != AttendanceStatus.absent)) {
@@ -586,6 +598,93 @@ class _ClubNageHomeState extends State<ClubNageHome> with WidgetsBindingObserver
       ));
       result = AttendanceResult(status: status, title: status == AttendanceStatus.late ? 'Retard enregistré' : 'Présent', message: member.fullName, member: member, uid: identifier);
     });
+    _saveAttendance();
+  }
+
+  Future<void> _confirmExceptionalAttendance(
+    Member member,
+    String identifier,
+    String method,
+    String sessionId,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Présence exceptionnelle'),
+        content: Text(
+          '${member.fullName} n’est pas affecté à cette séance. '
+          'Souhaites-tu autoriser exceptionnellement son pointage ?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Annuler'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Autoriser'),
+          ),
+        ],
+      ),
+    );
+
+    if (!mounted || confirmed != true) return;
+
+    // Une autre séance peut avoir été sélectionnée pendant la confirmation.
+    if (activeSession?.id != sessionId || !sessionOpen) return;
+    if (SlotAuthorization.permission(member, activeSession!.groupId) !=
+        SlotPermission.sameFamilyException) return;
+    _recordExceptionalAttendance(member, identifier, method);
+  }
+
+  void _recordExceptionalAttendance(
+    Member member,
+    String identifier,
+    String method,
+  ) {
+    if (activeSession == null || !activeSession!.isOpen) return;
+
+    if (currentRecords.any(
+      (r) => r.memberId == member.id && r.status != AttendanceStatus.absent,
+    )) {
+      setState(() => result = AttendanceResult(
+        status: AttendanceStatus.duplicate,
+        title: 'Déjà pointé',
+        message: '${member.fullName} est déjà enregistré.',
+        member: member,
+        uid: identifier,
+      ));
+      return;
+    }
+
+    final now = DateTime.now();
+    final start = activeSession!.startTime ?? now;
+    final status = now.isAfter(start.add(const Duration(minutes: 15)))
+        ? AttendanceStatus.late
+        : AttendanceStatus.present;
+
+    setState(() {
+      records.removeWhere(
+        (r) => r.sessionId == activeSession!.id && r.memberId == member.id,
+      );
+      records.add(AttendanceRecord(
+        memberId: member.id,
+        groupId: groupId,
+        sessionId: activeSession!.id,
+        timestamp: now,
+        status: status,
+        method: method,
+        isExceptional: true,
+      ));
+      result = AttendanceResult(
+        status: status,
+        title: 'Présence exceptionnelle enregistrée',
+        message: member.fullName,
+        member: member,
+        uid: identifier,
+      );
+    });
+
     _saveAttendance();
   }
 
