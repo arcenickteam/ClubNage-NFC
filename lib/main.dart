@@ -10,6 +10,7 @@ import 'services/nfc_service.dart';
 import 'services/local_attendance_store.dart';
 import 'services/local_roster_store.dart';
 import 'services/group_eligibility.dart';
+import 'services/slot_authorization.dart';
 import 'services/infomaniak_kdrive_service.dart';
 import 'services/kdrive_attendance_sync.dart';
 import 'services/kdrive_badge_sync.dart';
@@ -142,41 +143,34 @@ class _ClubNageHomeState extends State<ClubNageHome> with WidgetsBindingObserver
 
 
 
+  // Créneaux « Validé » du référentiel V8. Les créneaux à confirmer ne sont pas auto-ouverts.
   static const _weeklySlots = <Map<String, Object>>[
-    {'id':'jun-lun','label':'Compétition Juniors','groups':['juniors'],'weekday':1,'start':'18:45','end':'20:30'},
-    {'id':'jun-mar','label':'Compétition Juniors','groups':['juniors'],'weekday':2,'start':'19:15','end':'20:45'},
-    {'id':'jun-mer','label':'Compétition Juniors – préparation physique','groups':['juniors'],'weekday':3,'start':'15:00','end':'16:15'},
-    {'id':'jun-jeu','label':'Compétition Juniors','groups':['juniors'],'weekday':4,'start':'18:30','end':'20:15'},
-    {'id':'jun-ven','label':'Compétition Juniors','groups':['juniors'],'weekday':5,'start':'18:30','end':'20:00'},
-    {'id':'jun-sam','label':'Compétition Juniors','groups':['juniors'],'weekday':6,'start':'12:00','end':'13:15'},
-    {'id':'ben-lun','label':'Compétition Benjamins','groups':['benjamins'],'weekday':1,'start':'18:00','end':'19:30'},
-    {'id':'ben-mar','label':'Compétition Benjamins','groups':['benjamins'],'weekday':2,'start':'19:15','end':'20:15'},
-    {'id':'ben-jeu','label':'Compétition Benjamins','groups':['benjamins'],'weekday':4,'start':'18:15','end':'19:30'},
-    {'id':'ben-ven','label':'Compétition Benjamins','groups':['benjamins'],'weekday':5,'start':'18:30','end':'20:00'},
-    {'id':'av-lun','label':'Compétition Avenirs','groups':['avenirs'],'weekday':1,'start':'18:00','end':'19:00'},
-    {'id':'av-mer','label':'Compétition Avenirs','groups':['avenirs'],'weekday':3,'start':'13:30','end':'14:45'},
-    {'id':'av-ven','label':'Compétition Avenirs','groups':['avenirs'],'weekday':5,'start':'17:30','end':'18:30'},
-    {'id':'conf-mar','label':'Confirmés – Rouge / Violet / Bleu / Vert','groups':['rouge','violet','bleu','vert'],'weekday':2,'start':'18:15','end':'19:15'},
-    {'id':'conf-sam','label':'Confirmés – Rouge / Violet / Bleu / Vert','groups':['rouge','violet','bleu','vert'],'weekday':6,'start':'11:00','end':'12:00'},
-    {'id':'jaune-mer','label':'Débutants – Jaune','groups':['jaune'],'weekday':3,'start':'11:00','end':'11:45'},
-    {'id':'jaune-sam1','label':'Débutants – Jaune (créneau 1)','groups':['jaune'],'weekday':6,'start':'09:30','end':'10:15'},
-    {'id':'jaune-sam2','label':'Débutants – Jaune (créneau 2)','groups':['jaune'],'weekday':6,'start':'10:15','end':'11:00'},
-    {'id':'adult-lun-midi','label':'Adultes 18 ans et +','groups':['adultes'],'weekday':1,'start':'12:00','end':'13:00'},
-    {'id':'adult-lun-soir','label':'Adultes 18 ans et +','groups':['adultes'],'weekday':1,'start':'19:30','end':'20:30'},
-    {'id':'adult-jeu-midi','label':'Adultes 18 ans et +','groups':['adultes'],'weekday':4,'start':'12:00','end':'13:00'},
-    {'id':'adult-jeu-soir','label':'Adultes 18 ans et +','groups':['adultes'],'weekday':4,'start':'19:30','end':'20:30'},
-    {'id':'aqua-mer-10','label':'Aquaforme','groups':['aqua'],'weekday':3,'start':'10:00','end':'11:00'},
-    {'id':'aqua-mer-1230','label':'Aquaforme','groups':['aqua'],'weekday':3,'start':'12:30','end':'13:30'},
-    {'id':'aqua-ven','label':'Aquaforme','groups':['aqua'],'weekday':5,'start':'20:00','end':'21:00'},
-    {'id':'aqua-sam','label':'Aquafitness','groups':['aqua'],'weekday':6,'start':'09:00','end':'09:30'},
+    {'id':'officiel-01','label':'Junior','groups':['Junior'],'weekday':1,'start':'18:45','end':'20:30'},
+    {'id':'officiel-02','label':'Junior','groups':['Junior'],'weekday':2,'start':'19:15','end':'20:45'},
+    {'id':'officiel-03','label':'Junior – préparation physique','groups':['Junior'],'weekday':3,'start':'15:00','end':'16:15'},
+    {'id':'officiel-04','label':'Junior','groups':['Junior'],'weekday':4,'start':'18:30','end':'20:15'},
+    {'id':'officiel-05','label':'Junior','groups':['Junior'],'weekday':5,'start':'18:30','end':'20:00'},
+    {'id':'officiel-06','label':'Junior','groups':['Junior'],'weekday':6,'start':'12:00','end':'13:15'},
+    {'id':'officiel-07','label':'Benjamin','groups':['Benjamin'],'weekday':1,'start':'18:00','end':'19:30'},
+    {'id':'officiel-08','label':'Benjamin','groups':['Benjamin'],'weekday':2,'start':'19:15','end':'20:15'},
+    {'id':'officiel-09','label':'Benjamin','groups':['Benjamin'],'weekday':4,'start':'18:15','end':'19:30'},
+    {'id':'officiel-10','label':'Benjamin','groups':['Benjamin'],'weekday':5,'start':'18:30','end':'20:00'},
+    {'id':'officiel-11','label':'Avenir','groups':['Avenir'],'weekday':1,'start':'18:00','end':'19:00'},
+    {'id':'officiel-12','label':'Avenir','groups':['Avenir'],'weekday':3,'start':'13:30','end':'14:45'},
+    {'id':'officiel-13','label':'Avenir','groups':['Avenir'],'weekday':5,'start':'17:30','end':'18:30'},
+    {'id':'officiel-14','label':'RVBV','groups':['RVBV'],'weekday':2,'start':'18:15','end':'19:15'},
+    {'id':'officiel-15','label':'RVBV','groups':['RVBV'],'weekday':6,'start':'11:00','end':'12:00'},
+    {'id':'officiel-16','label':'Adultes','groups':['Adultes'],'weekday':1,'start':'12:00','end':'13:00'},
+    {'id':'officiel-17','label':'Adultes','groups':['Adultes'],'weekday':1,'start':'19:30','end':'20:30'},
+    {'id':'officiel-18','label':'Adultes','groups':['Adultes'],'weekday':4,'start':'12:00','end':'13:00'},
+    {'id':'officiel-19','label':'Adultes','groups':['Adultes'],'weekday':4,'start':'19:30','end':'20:30'},
   ];
-
   String _dayName(int w) => const ['', 'Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi','Dimanche'][w];
   DateTime _at(DateTime d,String t){final p=t.split(':');return DateTime(d.year,d.month,d.day,int.parse(p[0]),int.parse(p[1]));}
   List<Map<String,Object>> get _todaySlots => _weeklySlots.where((s)=>s['weekday']==DateTime.now().weekday).toList();
   List<String> _slotGroups(Map<String,Object> s)=>List<String>.from(s['groups'] as List);
-  bool _slotCanOpen(Map<String,Object> s){final n=DateTime.now(),st=_at(n,s['start'] as String);return !n.isBefore(st.subtract(const Duration(minutes:30)))&&n.isBefore(st.add(const Duration(hours:4)));}
-  List<Member> _membersForGroups(List<String> ids)=>members.where((m)=>GroupEligibility.anyMatch(m.groups, ids)).toList();
+  bool _slotCanOpen(Map<String,Object> s){final n=DateTime.now(),st=_at(n,s['start'] as String),en=_at(n,s['end'] as String);return !n.isBefore(st.subtract(const Duration(minutes:30)))&&n.isBefore(en.add(const Duration(minutes:15)));}
+  List<Member> _membersForGroups(List<String> ids)=>members.where((m)=>ids.any((id)=>SlotAuthorization.permission(m,id)==SlotPermission.authorized)).toList();
 
   void _openScheduledSession(Map<String,Object> slot){
     if (!_attendanceLoaded || _attendanceError != null) return;
@@ -191,7 +185,7 @@ class _ClubNageHomeState extends State<ClubNageHome> with WidgetsBindingObserver
 
   Future<void> _openManualSessionDialog() async{
     if (!_attendanceLoaded || _attendanceError != null) return;
-    String type='Entraînement exceptionnel',selectedGroup=groupId;
+    String type='Entraînement exceptionnel',selectedGroup=groups.any((g) => g.id == groupId) ? groupId : (groups.isNotEmpty ? groups.first.id : groupId);
     final ok=await showDialog<bool>(context:context,builder:(dc)=>StatefulBuilder(builder:(context,setLocal)=>AlertDialog(
       title:const Text('Ouvrir une séance manuelle'),
       content:Column(mainAxisSize:MainAxisSize.min,children:[
@@ -210,7 +204,7 @@ class _ClubNageHomeState extends State<ClubNageHome> with WidgetsBindingObserver
     )));
     if(ok!=true||!mounted)return;
     final n=DateTime.now(),exp=members.where((m)=>GroupEligibility.anyMatch(m.groups, [selectedGroup])).toList();
-    final s=TrainingSession(id:'manual-${n.millisecondsSinceEpoch}',groupId:selectedGroup,date:DateTime(n.year,n.month,n.day),openedAt:n,expectedMemberIds:List.unmodifiable(exp.map((m)=>m.id)),label:type,startTime:n,endTime:n,eligibleGroupIds:[selectedGroup],manualType:type,excludeFromStats:type=='Test badge');
+    final s=TrainingSession(id:'manual-${n.millisecondsSinceEpoch}',groupId:selectedGroup,date:DateTime(n.year,n.month,n.day),openedAt:n,expectedMemberIds:List.unmodifiable(exp.map((m)=>m.id)),label:'$type · $selectedGroup',startTime:n,endTime:n,eligibleGroupIds:[selectedGroup],manualType:type,excludeFromStats:type=='Test badge');
     setState((){sessions.add(s);activeSession=s;groupId=selectedGroup;sessionOpen=true;result=null;});
     _saveAttendance();
   }
@@ -223,7 +217,9 @@ class _ClubNageHomeState extends State<ClubNageHome> with WidgetsBindingObserver
     var changed = false;
     for (var i = 0; i < sessions.length; i++) {
       final s = sessions[i];
-      final deadline = (s.startTime ?? s.openedAt).add(const Duration(hours: 4));
+      final deadline = s.manualType == null && s.endTime != null
+          ? s.endTime!.add(const Duration(minutes: 15))
+          : s.openedAt.add(const Duration(hours: 4));
       if (s.isOpen && !now.isBefore(deadline)) {
         sessions[i] = s.close(now);
         changed = true;
@@ -232,7 +228,7 @@ class _ClubNageHomeState extends State<ClubNageHome> with WidgetsBindingObserver
     for (final slot in _todaySlots) {
       final start = _at(now, slot['start'] as String);
       if (now.isBefore(start.subtract(const Duration(minutes: 30))) ||
-          !now.isBefore(start.add(const Duration(hours: 4)))) continue;
+          !now.isBefore(_at(now, slot['end'] as String).add(const Duration(minutes: 15)))) continue;
       final id = '${slot['id']}-${now.year}-${now.month}-${now.day}';
       if (sessions.any((s) => s.id == id)) continue;
       final ids = _slotGroups(slot);
@@ -564,13 +560,55 @@ class _ClubNageHomeState extends State<ClubNageHome> with WidgetsBindingObserver
       setState(() => result = AttendanceResult(status: AttendanceStatus.unknown, title: 'Licencié inconnu', message: '$method non associé à un licencié.', uid: identifier));
       return;
     }
-    final eligible=activeSession!.eligibleGroupIds.isEmpty?[groupId]:activeSession!.eligibleGroupIds;
-    if (!GroupEligibility.anyMatch(member.groups, eligible)) {
-      setState(() => result = AttendanceResult(status: AttendanceStatus.denied, title: 'Mauvais groupe', message: '${member!.fullName} n’est pas inscrit à cette séance.', member: member, uid: identifier));
+    // Le groupe de la séance, pas son titre (« Stage », « Compétition »...),
+    // porte l'identifiant du créneau officiel.
+    final permission = SlotAuthorization.permission(member, activeSession!.groupId);
+    if (permission == SlotPermission.denied) {
+      setState(() => result = AttendanceResult(
+        status: AttendanceStatus.denied, title: 'Créneau non autorisé',
+        message: '${member!.fullName} n’est pas inscrit à ce créneau.',
+        member: member, uid: identifier));
+      return;
+    }
+    if (permission == SlotPermission.sameFamilyException) {
+      _confirmExceptionalAttendance(member, identifier, method, activeSession!.id);
       return;
     }
     if (currentRecords.any((r) => r.memberId == member!.id && r.status != AttendanceStatus.absent)) {
       setState(() => result = AttendanceResult(status: AttendanceStatus.duplicate, title: 'Déjà pointé', message: '${member!.fullName} est déjà enregistré pour cette séance.', member: member, uid: identifier));
+      return;
+    }
+    _recordIdentifier(member, identifier, method, exceptional: false);
+  }
+
+  Future<void> _confirmExceptionalAttendance(
+      Member member, String identifier, String method, String sessionId) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Présence exceptionnelle'),
+        content: Text('${member.fullName} : autoriser ce pointage sur un autre créneau de la même famille ?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Annuler')),
+          FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('Autoriser')),
+        ],
+      ),
+    );
+    if (!mounted || confirmed != true || activeSession?.id != sessionId ||
+        !activeSession!.isOpen) return;
+    _recordIdentifier(member, identifier, method, exceptional: true);
+  }
+
+  void _recordIdentifier(Member member, String identifier, String method,
+      {required bool exceptional}) {
+    if (!_attendanceLoaded || _attendanceError != null || _closingSession ||
+        activeSession == null || !activeSession!.isOpen) return;
+    if (currentRecords.any((r) => r.memberId == member.id &&
+        r.status != AttendanceStatus.absent)) {
+      setState(() => result = AttendanceResult(
+        status: AttendanceStatus.duplicate, title: 'Déjà pointé',
+        message: '${member.fullName} est déjà enregistré pour cette séance.',
+        member: member, uid: identifier));
       return;
     }
     final now = DateTime.now();
@@ -582,9 +620,9 @@ class _ClubNageHomeState extends State<ClubNageHome> with WidgetsBindingObserver
       records.add(AttendanceRecord(
         memberId: member!.id, groupId: groupId, sessionId: activeSession!.id,
         timestamp: previous.isEmpty ? now : previous.first.timestamp,
-        status: status, method: method,
+        status: status, method: exceptional ? '$method (exception)' : method,
       ));
-      result = AttendanceResult(status: status, title: status == AttendanceStatus.late ? 'Retard enregistré' : 'Présent', message: member.fullName, member: member, uid: identifier);
+      result = AttendanceResult(status: status, title: exceptional ? 'Présence exceptionnelle enregistrée' : (status == AttendanceStatus.late ? 'Retard enregistré' : 'Présent'), message: member.fullName, member: member, uid: identifier);
     });
     _saveAttendance();
   }
@@ -2312,7 +2350,7 @@ class _ClubNageHomeState extends State<ClubNageHome> with WidgetsBindingObserver
         initialValue: activeSession?.id,
         decoration: const InputDecoration(labelText:'Séance active', prefixIcon:Icon(Icons.pool)),
         items: _openSessions.map((s) => DropdownMenuItem(
-          value:s.id, child:Text(s.label ?? _groupById(s.groupId).name,
+          value:s.id, child:Text('${s.label ?? _groupById(s.groupId).name} · ${s.startTime == null ? '—' : _time(s.startTime!)}',
             overflow:TextOverflow.ellipsis))).toList(),
         onChanged:(id) {
           final selected = _openSessions.where((s) => s.id == id).firstOrNull;

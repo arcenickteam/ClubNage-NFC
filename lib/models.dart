@@ -13,6 +13,7 @@ class Member {
   final String category;
   final String session1;
   final String session2;
+  final String authorizedSlots;
   final String level;
   final String city;
   final String guardianPhone;
@@ -32,6 +33,7 @@ class Member {
     this.category = '',
     this.session1 = '',
     this.session2 = '',
+    this.authorizedSlots = '',
     this.level = '',
     this.city = '',
     this.guardianPhone = '',

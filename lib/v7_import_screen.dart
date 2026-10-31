@@ -256,6 +256,7 @@ class _V7ImportScreenState extends State<V7ImportScreen> {
           'categorie': col('Catégorie') >= 0 ? cell(row, col('Catégorie')) : '',
           'session1': col('Session 1') >= 0 ? cell(row, col('Session 1')) : '',
           'session2': col('Session 2') >= 0 ? cell(row, col('Session 2')) : '',
+          'creneau': col('Créneau') >= 0 ? cell(row, col('Créneau')) : '',
           'niveau': col('Niveau') >= 0 ? cell(row, col('Niveau')) : '',
           'dateNaissance': col('Date naissance') >= 0 ? cell(row, col('Date naissance')) : '',
           'ville': col('Ville') >= 0 ? cell(row, col('Ville')) : '',

@@ -3,7 +3,7 @@ name: Club MN NFC - Android APK
 on:
   workflow_dispatch:
   push:
-    branches: [ "main", "v6", "v7", "v7.13-corrections", "v7.14-corrections", "v7.15-synchronisation-badges", "v7.16-corrections" ]
+    branches: [ "main", "v6", "v7", "v7.13-corrections", "v7.14-corrections", "v7.15-synchronisation-badges", "v7.16-corrections", "v7.18-creneaux" ]
 
 jobs:
   build-apk:
@@ -54,7 +54,7 @@ jobs:
           flutter --version
           flutter pub get
           flutter analyze
-          flutter test test/local_attendance_store_test.dart test/attendance_v711_test.dart
+          flutter test test/local_attendance_store_test.dart test/attendance_v711_test.dart test/slot_authorization_test.dart
 
       - name: Corriger le SDK Android du module OAuth
         run: |
