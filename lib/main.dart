@@ -792,7 +792,7 @@ class _ClubNageHomeState extends State<ClubNageHome> with WidgetsBindingObserver
         ),
         actions: [
           IconButton(
-            tooltip: 'V7 · Essais kDrive',
+            tooltip: 'V7.16 · Import kDrive',
             icon: const Icon(Icons.cloud_download_outlined),
             onPressed: () async {
               await Navigator.of(context).push(

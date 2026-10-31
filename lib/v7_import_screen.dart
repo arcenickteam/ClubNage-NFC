@@ -45,6 +45,39 @@ class _V7ImportScreenState extends State<V7ImportScreen> {
     }
   }
 
+  Future<void> clearLocalRoster() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Vider la liste locale des licenciés ?'),
+        content: const Text(
+          'Cette opération supprime uniquement la liste des licenciés mémorisée '
+          'sur ce téléphone. Elle ne supprime pas les fichiers kDrive, les '
+          'associations NFC ni les historiques de présence. '
+          'Réimportez ensuite la base officielle.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Annuler')),
+          FilledButton(onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Vider la liste locale')),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() => busy = true);
+    try {
+      await rosterStore.clear();
+      if (mounted) setState(() {
+        people = [];
+        status = 'Liste locale vidée. Importez maintenant la base officielle kDrive.';
+      });
+    } catch (e) {
+      if (mounted) setState(() => status = 'Suppression impossible : $e');
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
+  }
+
   Future<void> _restoreKdrive() async {
     try {
       final restored = await kdrive.restoreSavedApiToken();
@@ -130,7 +163,7 @@ class _V7ImportScreenState extends State<V7ImportScreen> {
   }
 
   Future<void> synchronizeKdrive() async {
-    setState(() { busy = true; status = 'Début du diagnostic kDrive V7.4…'; });
+    setState(() { busy = true; status = 'Synchronisation kDrive : démarrage…'; });
     String step = 'initialisation';
     void progress(String message) {
       step = message;
@@ -244,7 +277,7 @@ class _V7ImportScreenState extends State<V7ImportScreen> {
       final result = parseMembers(XlsxDataReader.readSheet(excel, 'Licenciés'));
       await rosterStore.save(result);
       if (!mounted) return;
-      setState(() { people = result; status = 'Base V4 : ${result.length} licenciés chargés en lecture seule'; });
+      setState(() { people = result; status = 'Base officielle : ${result.length} licenciés importés et mémorisés'; });
     } catch (e) {
       if (mounted) setState(() => status = 'Erreur de lecture : $e');
     } finally {
@@ -273,7 +306,7 @@ class _V7ImportScreenState extends State<V7ImportScreen> {
       if (excel == null) return;
       final result = parseSchedule(XlsxDataReader.readSheet(excel, 'Planning référentiel'));
       if (!mounted) return;
-      setState(() { slots = result; status = 'Planning V4 : ${result.length} entrées chargées en lecture seule'; });
+      setState(() { slots = result; status = 'Planning officiel : ${result.length} créneaux chargés'; });
     } catch (e) {
       if (mounted) setState(() => status = 'Erreur de lecture : $e');
     } finally {
@@ -287,9 +320,9 @@ class _V7ImportScreenState extends State<V7ImportScreen> {
     final visible = people.where((p) => '${p['nom']} ${p['prenom']} ${p['groupes']} ${p['id']}'
         .toLowerCase().contains(q)).toList();
     return Scaffold(
-      appBar: AppBar(title: const Text('V7.6 · kDrive')),
+      appBar: AppBar(title: const Text('V7.16 · kDrive')),
       body: ListView(padding: const EdgeInsets.all(16), children: [
-        const Text('V7.6 : importation durable des licenciés sur ce téléphone. Les pointages restent locaux : aucun envoi vers kDrive n’est encore activé.'),
+        const Text('Importation de la base officielle et du planning depuis kDrive. Les badges et les présences sont synchronisés depuis l’écran principal.'),
         const SizedBox(height: 12),
         FilledButton.icon(onPressed: busy ? null : configureApiToken, icon: const Icon(Icons.key), label: const Text('Configurer le jeton API kDrive')),
         const SizedBox(height: 8),
@@ -297,11 +330,17 @@ class _V7ImportScreenState extends State<V7ImportScreen> {
         const SizedBox(height: 8),
         FilledButton.icon(onPressed: busy || !kdrive.isConnected ? null : synchronizeKdrive, icon: const Icon(Icons.sync), label: const Text('Synchroniser les deux fichiers kDrive')),
         const SizedBox(height: 12),
+        OutlinedButton.icon(
+          onPressed: busy ? null : clearLocalRoster,
+          icon: const Icon(Icons.delete_outline),
+          label: const Text('Vider la liste locale avant les tests'),
+        ),
+        const SizedBox(height: 12),
         const Text('Dépannage : import manuel des fichiers XLSX'),
         const SizedBox(height: 12),
-        FilledButton.icon(onPressed: busy ? null : loadMembers, icon: const Icon(Icons.people), label: const Text('Importer la base licenciés V4')),
+        FilledButton.icon(onPressed: busy ? null : loadMembers, icon: const Icon(Icons.people), label: const Text('Importer la base licenciés officielle')),
         const SizedBox(height: 8),
-        OutlinedButton.icon(onPressed: busy ? null : loadSchedule, icon: const Icon(Icons.calendar_month), label: const Text('Importer le suivi / planning V4')),
+        OutlinedButton.icon(onPressed: busy ? null : loadSchedule, icon: const Icon(Icons.calendar_month), label: const Text('Importer le suivi / planning officiel')),
         if (busy) const LinearProgressIndicator(),
         const SizedBox(height: 12), Text(status),
         const Divider(height: 32),

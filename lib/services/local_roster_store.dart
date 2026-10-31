@@ -38,6 +38,14 @@ class LocalRosterStore {
     return result;
   }
 
+  /// Efface uniquement le référentiel local après confirmation explicite.
+  /// Ne touche pas aux badges, aux pointages ni au jeton kDrive.
+  Future<void> clear() async {
+    final prefs = await SharedPreferences.getInstance();
+    final ok = await prefs.remove(key);
+    if (!ok) throw StateError('Suppression du référentiel local impossible.');
+  }
+
   Future<void> save(List<Map<String, String>> rows) async {
     if (rows.isEmpty) throw StateError('Import vide : base locale conservée.');
     final ids = <String>{};
