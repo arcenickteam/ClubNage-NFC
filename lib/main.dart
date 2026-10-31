@@ -614,11 +614,11 @@ class _ClubNageHomeState extends State<ClubNageHome> with WidgetsBindingObserver
     final now = DateTime.now();
     final start=activeSession!.startTime??now;
     final status=now.isAfter(start.add(const Duration(minutes:15)))?AttendanceStatus.late:AttendanceStatus.present;
-    final previous = currentRecords.where((r) => r.memberId == member!.id).toList();
+    final previous = currentRecords.where((r) => r.memberId == member.id).toList();
     setState(() {
-      records.removeWhere((r) => r.sessionId == activeSession!.id && r.memberId == member!.id);
+      records.removeWhere((r) => r.sessionId == activeSession!.id && r.memberId == member.id);
       records.add(AttendanceRecord(
-        memberId: member!.id, groupId: groupId, sessionId: activeSession!.id,
+        memberId: member.id, groupId: groupId, sessionId: activeSession!.id,
         timestamp: previous.isEmpty ? now : previous.first.timestamp,
         status: status, method: exceptional ? '$method (exception)' : method,
       ));
