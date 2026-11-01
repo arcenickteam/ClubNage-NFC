@@ -420,7 +420,8 @@ class _ClubNageHomeState extends State<ClubNageHome> with WidgetsBindingObserver
   List<AttendanceRecord> get currentRecords {
     final session = activeSession;
     if (session == null || session.groupId != groupId) return [];
-    return records.where((r) => r.sessionId == session.id).toList();
+    return records.where((r) => r.sessionId == session.id &&
+        r.status != AttendanceStatus.refused).toList();
   }
   int get presentCount => currentRecords.where((r) => r.status == AttendanceStatus.present || r.status == AttendanceStatus.late).map((r) => r.memberId).toSet().length;
   int get lateCount => currentRecords.where((r) => r.status == AttendanceStatus.late).length;
@@ -583,19 +584,40 @@ class _ClubNageHomeState extends State<ClubNageHome> with WidgetsBindingObserver
 
   Future<void> _confirmExceptionalAttendance(
       Member member, String identifier, String method, String sessionId) async {
-    final confirmed = await showDialog<bool>(
+    // null = Annuler (aucune décision), false = Refuser (tracé), true = Autoriser.
+    final decision = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('Présence exceptionnelle'),
         content: Text('${member.fullName} : autoriser ce pointage sur un autre créneau de la même famille ?'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Annuler')),
+          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Annuler')),
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Refuser', style: TextStyle(color: Colors.redAccent))),
           FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('Autoriser')),
         ],
       ),
     );
-    if (!mounted || confirmed != true || activeSession?.id != sessionId ||
+    if (!mounted || decision == null || activeSession?.id != sessionId ||
         !activeSession!.isOpen) return;
+    if (decision == false) {
+      // Journal d'audit distinct des présences : ne compte pas comme absence,
+      // et reste conservé même si une autorisation intervient ensuite.
+      setState(() {
+        records.add(AttendanceRecord(
+          memberId: member.id, groupId: activeSession!.groupId,
+          sessionId: sessionId, timestamp: DateTime.now(),
+          status: AttendanceStatus.refused,
+          method: '$method (refus exceptionnel)',
+        ));
+        result = AttendanceResult(status: AttendanceStatus.denied,
+          title: 'Présence exceptionnelle refusée',
+          message: '${member.fullName} : refus enregistré localement.',
+          member: member, uid: identifier);
+      });
+      _saveAttendance();
+      return;
+    }
     _recordIdentifier(member, identifier, method, exceptional: true);
   }
 
@@ -616,7 +638,8 @@ class _ClubNageHomeState extends State<ClubNageHome> with WidgetsBindingObserver
     final status=now.isAfter(start.add(const Duration(minutes:15)))?AttendanceStatus.late:AttendanceStatus.present;
     final previous = currentRecords.where((r) => r.memberId == member.id).toList();
     setState(() {
-      records.removeWhere((r) => r.sessionId == activeSession!.id && r.memberId == member.id);
+      records.removeWhere((r) => r.sessionId == activeSession!.id &&
+          r.memberId == member.id && r.status != AttendanceStatus.refused);
       records.add(AttendanceRecord(
         memberId: member.id, groupId: groupId, sessionId: activeSession!.id,
         timestamp: previous.isEmpty ? now : previous.first.timestamp,
@@ -1725,7 +1748,8 @@ class _ClubNageHomeState extends State<ClubNageHome> with WidgetsBindingObserver
       final record = ManualAttendance.update(records: records, session: session,
           memberId: member.id, status: status, now: DateTime.now());
       setState(() {
-        records.removeWhere((r) => r.sessionId == session.id && r.memberId == member.id);
+        records.removeWhere((r) => r.sessionId == session.id &&
+            r.memberId == member.id && r.status != AttendanceStatus.refused);
         records.add(record);
       });
       _saveAttendance();

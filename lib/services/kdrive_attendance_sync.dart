@@ -26,7 +26,8 @@ class KdriveAttendanceSync {
       throw StateError('Configurer le jeton API kDrive dans l’écran d’import.');
     }
     final local = records.where((r) => r.status == AttendanceStatus.present ||
-        r.status == AttendanceStatus.late || r.status == AttendanceStatus.absent).toList();
+        r.status == AttendanceStatus.late || r.status == AttendanceStatus.absent ||
+        r.status == AttendanceStatus.refused).toList();
     if (local.isEmpty) return 0;
     final etag = await api.scheduleEtag();
     final before = await api.downloadWorkbook(InfomaniakKdriveService.scheduleName);
@@ -54,7 +55,8 @@ class KdriveAttendanceSync {
         session?.label ?? record.groupId, record.groupId,
         record.sessionId ?? '', record.method, 'ClubNage Android', syncDate,
         record.status == AttendanceStatus.absent ? 'Absent' :
-            record.status == AttendanceStatus.late ? 'Retard' : 'Présent',
+            record.status == AttendanceStatus.late ? 'Retard' :
+            record.status == AttendanceStatus.refused ? 'Refus exceptionnel' : 'Présent',
       ];
       final previous = oldRows[id];
       if (previous == null || !samePointage(previous, row)) newRows.add(row);

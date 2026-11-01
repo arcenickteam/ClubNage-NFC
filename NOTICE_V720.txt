@@ -1,0 +1,22 @@
+ClubNage NFC V7.20 — CANDIDAT DE TEST
+
+Base: sources V7.19 du correctif partagé dans cette conversation, plus fichiers inchangés du projet V7.17/V7.18.
+Le ZIP ne contient que les fichiers à remplacer.
+
+Changements:
+- Fenêtre « Présence exceptionnelle »: Annuler (aucun effet), Refuser (trace), Autoriser (présence).
+- Refus conservés localement comme AttendanceStatus.refused dans le snapshot existant.
+- Les refus ne comptent pas comme présents ou absents et ne bloquent pas une autorisation ultérieure.
+- Export dans Pointages NFC: Statut « Refus exceptionnel » et méthode « NFC (refus exceptionnel) » (ou QR).
+- VersionCode Android augmenté à chaque exécution GitHub Actions via github.run_number.
+- Branche v7.20-production autorisée dans le workflow.
+
+NON FINALISÉ :
+- Signature Android permanente : impossible sans clé privée créée et configurée par le propriétaire du dépôt.
+  Ne pas diffuser à d'autres utilisateurs tant que la signature n'est pas stabilisée.
+- Pas de compilation Flutter exécutée dans cet environnement ; GitHub Actions est la validation obligatoire.
+- L'affichage des conflits sous forme de liste dédiée n'est pas inclus dans ce correctif.
+- Les vues du classeur Excel fourni séparément sont des instantanés, pas des tableaux recalculés automatiquement.
+- Ne pas écraser le classeur kDrive de production avec le fichier candidat sans test de synchronisation sur une copie.
+
+INSTALLATION : créer une branche depuis la V7.19 validée, sauvegarder, puis décompresser les fichiers de ce correctif à la racine du projet.
