@@ -1,0 +1,48 @@
+CLUBNAGE NFC — V7.21 : SIGNATURE ANDROID PERMANENTE
+===================================================
+
+Ce correctif se pose sur la branche v7.20-production (version candidate déjà compilée).
+Il ne modifie pas la logique NFC, les présences, les refus ou les fichiers kDrive.
+
+CONTENU :
+- .github/workflows/build-android-apk.yml : signature de production obligatoire,
+  vérification de l'APK et version 7.21.0 avec versionCode 1000 + github.run_number.
+- tool/configure_release_signing.py : configure la signature release dans le
+  fichier Gradle Kotlin généré par flutter create à chaque compilation.
+- NOTICE_V721.txt : cette notice.
+
+IMPORTANT — 4 secrets GitHub sont obligatoires AVANT la compilation :
+  CLUBNAGE_KEYSTORE_BASE64 : contenu base64 du fichier .jks privé
+  CLUBNAGE_STORE_PASSWORD  : mot de passe du magasin
+  CLUBNAGE_KEY_ALIAS       : alias de la clé
+  CLUBNAGE_KEY_PASSWORD    : mot de passe de la clé
+
+Exemple de génération LOCALE sur le Mac (ne PAS envoyer la clé ni les mots de passe
+sur ChatGPT ou dans Git) :
+
+  mkdir -p "$HOME/ClubNage_Cle_Privee"
+  keytool -genkeypair -v -keystore "$HOME/ClubNage_Cle_Privee/clubnage-release.jks" \
+    -alias clubnage -keyalg RSA -keysize 3072 -validity 10000 -storetype JKS
+
+Choisir et sauvegarder les mots de passe dans un gestionnaire de mots de passe.
+Pour obtenir la valeur du secret base64 sur macOS :
+
+  base64 -i "$HOME/ClubNage_Cle_Privee/clubnage-release.jks" | tr -d '\n' | pbcopy
+
+Puis dans GitHub : dépôt > Settings > Secrets and variables > Actions >
+New repository secret. Coller la valeur copiée dans CLUBNAGE_KEYSTORE_BASE64,
+et créer les trois autres secrets.
+
+CONSERVER le .jks et les mots de passe dans deux sauvegardes privées distinctes.
+Une perte de la clé empêche de publier des mises à jour compatibles.
+
+La V7.19/V7.20 actuelle a une AUTRE signature debug. Il est IMPOSSIBLE
+que la V7.21 signée avec la nouvelle clé s'installe par-dessus directement.
+Faire une dernière migration contrôlée après synchronisation complète, puis
+les futures mises à jour signées avec CETTE MÊME clé pourront s'installer
+sans désinstallation (si le package et versionCode restent compatibles).
+
+L'APK V7.21 NE SERA PAS PUBLIÉ si les secrets sont absents ou invalides.
+Ne pas mettre le fichier .jks ni les mots de passe dans le dépôt Git.
+
+Vérification statique effectuée sur le ZIP, compilation réelle GitHub requise.

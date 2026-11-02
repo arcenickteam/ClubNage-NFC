@@ -3,7 +3,7 @@ name: Club MN NFC - Android APK
 on:
   workflow_dispatch:
   push:
-    branches: [ "main", "v6", "v7", "v7.13-corrections", "v7.14-corrections", "v7.15-synchronisation-badges", "v7.16-corrections", "v7.18-creneaux", "v7.19-synchronisation", "v7.20-production" ]
+    branches: [ "main", "v6", "v7", "v7.13-corrections", "v7.14-corrections", "v7.15-synchronisation-badges", "v7.16-corrections", "v7.18-creneaux", "v7.19-synchronisation", "v7.20-production", "v7.21-signature" ]
 
 jobs:
   build-apk:
@@ -29,6 +29,30 @@ jobs:
 
       - name: Générer la plateforme Android
         run: flutter create --platforms=android --org fr.montchanin.clubnage .
+
+      - name: Configurer la signature de production Android
+        shell: bash
+        env:
+          CLUBNAGE_KEYSTORE_BASE64: ${{ secrets.CLUBNAGE_KEYSTORE_BASE64 }}
+          CLUBNAGE_STORE_PASSWORD: ${{ secrets.CLUBNAGE_STORE_PASSWORD }}
+          CLUBNAGE_KEY_ALIAS: ${{ secrets.CLUBNAGE_KEY_ALIAS }}
+          CLUBNAGE_KEY_PASSWORD: ${{ secrets.CLUBNAGE_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          for name in CLUBNAGE_KEYSTORE_BASE64 CLUBNAGE_STORE_PASSWORD CLUBNAGE_KEY_ALIAS CLUBNAGE_KEY_PASSWORD; do
+            if [ -z "${!name:-}" ]; then
+              echo "ERREUR : secret GitHub $name manquant. Aucune APK non signée ne sera publiée."
+              exit 1
+            fi
+          done
+          KEYSTORE_PATH="$RUNNER_TEMP/clubnage-release.jks"
+          printf '%s' "$CLUBNAGE_KEYSTORE_BASE64" | base64 --decode > "$KEYSTORE_PATH"
+          chmod 600 "$KEYSTORE_PATH"
+          keytool -list -keystore "$KEYSTORE_PATH" \
+            -storepass "$CLUBNAGE_STORE_PASSWORD" \
+            -alias "$CLUBNAGE_KEY_ALIAS" >/dev/null
+          python3 tool/configure_release_signing.py
+          echo "Signature de production configurée ; la clé reste hors du dépôt."
 
       - name: Supprimer le test Flutter par défaut
         run: rm -f test/widget_test.dart
@@ -81,8 +105,36 @@ jobs:
           print('SDK OAuth corrigé vers 36')
           PATCH
 
-      - name: Construire l'APK de test
-        run: flutter build apk --release --build-number="${{ github.run_number }}"
+      - name: Construire l'APK de production signé
+        env:
+          CLUBNAGE_KEYSTORE_PATH: ${{ runner.temp }}/clubnage-release.jks
+          CLUBNAGE_STORE_PASSWORD: ${{ secrets.CLUBNAGE_STORE_PASSWORD }}
+          CLUBNAGE_KEY_ALIAS: ${{ secrets.CLUBNAGE_KEY_ALIAS }}
+          CLUBNAGE_KEY_PASSWORD: ${{ secrets.CLUBNAGE_KEY_PASSWORD }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          BUILD_NUMBER=$((1000 + GITHUB_RUN_NUMBER))
+          flutter build apk --release --build-name=7.21.0 --build-number="$BUILD_NUMBER"
+
+      - name: Contrôler la signature et la version de l'APK
+        shell: bash
+        env:
+          CLUBNAGE_STORE_PASSWORD: ${{ secrets.CLUBNAGE_STORE_PASSWORD }}
+          CLUBNAGE_KEY_ALIAS: ${{ secrets.CLUBNAGE_KEY_ALIAS }}
+        run: |
+          set -euo pipefail
+          APK=build/app/outputs/flutter-apk/app-release.apk
+          test -s "$APK"
+          APKSIGNER="$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -1)"
+          AAPT="$(find "$ANDROID_HOME/build-tools" -name aapt -type f | sort -V | tail -1)"
+          test -n "$APKSIGNER" && test -n "$AAPT"
+          "$APKSIGNER" verify --verbose --print-certs "$APK"
+          "$AAPT" dump badging "$APK" | grep -m1 '^package:'
+          KEY_FINGERPRINT="$(keytool -list -v -keystore "$RUNNER_TEMP/clubnage-release.jks" -storepass "$CLUBNAGE_STORE_PASSWORD" -alias "$CLUBNAGE_KEY_ALIAS" | grep 'SHA256:' | head -1 | tr -d ' :')"
+          APK_FINGERPRINT="$("$APKSIGNER" verify --print-certs "$APK" | grep 'Signer #1 certificate SHA-256 digest:' | head -1 | awk '{print $NF}' | tr '[:lower:]' '[:upper:]')"
+          test -n "$KEY_FINGERPRINT" && test -n "$APK_FINGERPRINT"
+          case "$KEY_FINGERPRINT" in *"$APK_FINGERPRINT"*) echo 'Certificat de production confirmé.' ;; *) echo 'ERREUR : certificat APK différent de la clé de production.'; exit 1 ;; esac
 
       - name: Diagnostic manifeste fusionné OAuth2
         shell: bash
