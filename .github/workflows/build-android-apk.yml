@@ -39,18 +39,32 @@ jobs:
           CLUBNAGE_KEY_PASSWORD: ${{ secrets.CLUBNAGE_KEY_PASSWORD }}
         run: |
           set -euo pipefail
+          echo "Diagnostic V7.21 : vérification des secrets"
           for name in CLUBNAGE_KEYSTORE_BASE64 CLUBNAGE_STORE_PASSWORD CLUBNAGE_KEY_ALIAS CLUBNAGE_KEY_PASSWORD; do
             if [ -z "${!name:-}" ]; then
               echo "ERREUR : secret GitHub $name manquant. Aucune APK non signée ne sera publiée."
               exit 1
             fi
           done
+          echo "Diagnostic V7.21 : secrets présents ; décodage de la clé"
           KEYSTORE_PATH="$RUNNER_TEMP/clubnage-release.jks"
-          printf '%s' "$CLUBNAGE_KEYSTORE_BASE64" | base64 --decode > "$KEYSTORE_PATH"
+          if ! printf '%s' "$CLUBNAGE_KEYSTORE_BASE64" | base64 --decode > "$KEYSTORE_PATH"; then
+            echo "ERREUR : impossible de décoder CLUBNAGE_KEYSTORE_BASE64."
+            exit 1
+          fi
           chmod 600 "$KEYSTORE_PATH"
-          keytool -list -keystore "$KEYSTORE_PATH" \
+          if [ ! -s "$KEYSTORE_PATH" ]; then
+            echo "ERREUR : fichier de clé décodé vide."
+            exit 1
+          fi
+          echo "Diagnostic V7.21 : décodage terminé ; contrôle du magasin et de l'alias"
+          if ! keytool -list -keystore "$KEYSTORE_PATH" \
             -storepass "$CLUBNAGE_STORE_PASSWORD" \
-            -alias "$CLUBNAGE_KEY_ALIAS" >/dev/null
+            -alias "$CLUBNAGE_KEY_ALIAS" >/dev/null 2>&1; then
+            echo "ERREUR : magasin illisible, mot de passe incorrect ou alias absent."
+            exit 1
+          fi
+          echo "Diagnostic V7.21 : certificat validé ; configuration Gradle"
           python3 tool/configure_release_signing.py
           echo "Signature de production configurée ; la clé reste hors du dépôt."
 
