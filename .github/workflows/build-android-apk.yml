@@ -146,7 +146,7 @@ jobs:
           "$APKSIGNER" verify --verbose --print-certs "$APK"
           "$AAPT" dump badging "$APK" | grep -m1 '^package:'
           KEY_FINGERPRINT="$(keytool -list -v -keystore "$RUNNER_TEMP/clubnage-release.jks" -storepass "$CLUBNAGE_STORE_PASSWORD" -alias "$CLUBNAGE_KEY_ALIAS" | grep 'SHA256:' | head -1 | tr -d ' :')"
-          APK_FINGERPRINT="$("$APKSIGNER" verify --print-certs "$APK" | grep 'Signer #1 certificate SHA-256 digest:' | head -1 | awk '{print $NF}' | tr '[:lower:]' '[:upper:]')"
+          APK_FINGERPRINT="$("$APKSIGNER" verify --print-certs "$APK" | grep -E '(Signer #1|V2 Signer): certificate SHA-256 digest:' | head -1 | awk '{print $NF}' | tr '[:lower:]' '[:upper:]')"
           test -n "$KEY_FINGERPRINT" && test -n "$APK_FINGERPRINT"
           case "$KEY_FINGERPRINT" in *"$APK_FINGERPRINT"*) echo 'Certificat de production confirmé.' ;; *) echo 'ERREUR : certificat APK différent de la clé de production.'; exit 1 ;; esac
 
