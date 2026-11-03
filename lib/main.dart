@@ -1040,11 +1040,17 @@ class _ClubNageHomeState extends State<ClubNageHome> with WidgetsBindingObserver
       context: context,
       backgroundColor: panel,
       showDragHandle: true,
+      isScrollControlled: true,
       builder: (sheetContext) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(14, 4, 14, 18),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.sizeOf(sheetContext).height * 0.85,
+          ),
+          child: SingleChildScrollView(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(14, 4, 14, 18),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
             children: [
               const Align(
                 alignment: Alignment.centerLeft,
@@ -1107,20 +1113,66 @@ class _ClubNageHomeState extends State<ClubNageHome> with WidgetsBindingObserver
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () {
                   Navigator.pop(sheetContext);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text(
-                        'Les paramètres avancés seront ajoutés dans la V6.',
-                      ),
-                    ),
-                  );
+                  _showSettingsPage();
                 },
+              ),
+            ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showSettingsPage() {
+    Navigator.of(context).push(MaterialPageRoute<void>(
+      builder: (settingsContext) => Scaffold(
+        appBar: AppBar(title: const Text('Paramètres')),
+        body: SafeArea(
+          child: ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              const ListTile(
+                leading: Icon(Icons.info_outline),
+                title: Text('ClubNage-NFC'),
+                subtitle: Text('Version 7.22 · Montchanin Natation'),
+              ),
+              const Divider(),
+              ListTile(
+                leading: const Icon(Icons.cloud_sync_outlined),
+                title: const Text('Synchronisation kDrive'),
+                subtitle: const Text('Badges NFC et présences'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () {
+                  Navigator.pop(settingsContext);
+                  _go(7);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.cloud_download_outlined),
+                title: const Text('Importer les licenciés / configurer kDrive'),
+                subtitle: const Text('Accès au jeton API et au fichier des licenciés'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () async {
+                  await Navigator.of(settingsContext).push(
+                    MaterialPageRoute<void>(builder: (_) => const V7ImportScreen()),
+                  );
+                  if (mounted) await _restoreRoster();
+                },
+              ),
+              const Padding(
+                padding: EdgeInsets.all(16),
+                child: Text(
+                  'Les affectations NFC non synchronisées restent sur ce téléphone. '
+                  'Vérifiez les messages de conflit avant toute réaffectation.',
+                ),
               ),
             ],
           ),
         ),
       ),
-    );
+    ));
   }
 
   Widget _moreTile(
@@ -2415,18 +2467,22 @@ class _ClubNageHomeState extends State<ClubNageHome> with WidgetsBindingObserver
         final badges = await KdriveBadgeSync(InfomaniakKdriveService())
             .synchronize(List.of(members));
         final prefs = await SharedPreferences.getInstance();
-        // Les affectations confirmées sur kDrive font autorité sur ce téléphone.
-        // Les conflits locaux restent dans le journal en attente de résolution.
+        // Conserver les affectations locales en attente, y compris les conflits.
+        // Ne jamais supprimer un UID local au seul motif qu'il est absent du cloud.
+        final merged = <String, String>{...badges.sharedBadges};
+        for (final entry in badges.pendingBadges.entries) {
+          merged[entry.key] = entry.value;
+        }
         for (final m in members) {
-          final uid = badges.sharedBadges[m.id];
-          if (uid == null) {
-            await prefs.remove('uid_${m.id}');
-          } else {
-            await prefs.setString('uid_${m.id}', uid);
+          final uid = merged[m.id];
+          if (uid != null) {
+            if (!await prefs.setString('uid_${m.id}', uid)) {
+              throw StateError('Sauvegarde locale du badge impossible : ${m.id}');
+            }
           }
         }
         if (mounted) setState(() {
-          assignedUids..clear()..addAll(badges.sharedBadges);
+          assignedUids..addAll(merged);
         });
         messages.add('Badges : ${badges.sharedBadges.length} partagés, '
             '${badges.uploaded} nouveau(x) envoyé(s).');
@@ -2435,7 +2491,7 @@ class _ClubNageHomeState extends State<ClubNageHome> with WidgetsBindingObserver
               '${badges.conflicts.join(' ; ')}');
         }
         if (badges.pending > 0) {
-          messages.add('${badges.pending} affectation(s) locale(s) en attente.');
+          messages.add('${badges.pending} affectation(s) locale(s) en attente : ne pas réaffecter ces badges avant résolution.');
         }
       } catch (e) {
         messages.add('Badges : échec, données locales conservées : $e');

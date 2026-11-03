@@ -11,11 +11,14 @@ class BadgeSyncResult {
   final List<String> conflicts;
   final int uploaded;
   final int pending;
+  /// Affectations locales non confirmées, à préserver sur le téléphone.
+  final Map<String, String> pendingBadges;
   const BadgeSyncResult({
     required this.sharedBadges,
     required this.conflicts,
     required this.uploaded,
     required this.pending,
+    required this.pendingBadges,
   });
 }
 
@@ -150,16 +153,39 @@ class KdriveBadgeSync {
     }
     // La file n'est réduite qu'après confirmation de tous les ajouts acceptés.
     // Les conflits ne sont jamais effacés automatiquement.
-    if (remaining.length != rawPending.length) {
-      if (!await prefs.setStringList(_queueKey, remaining)) {
+    // Un scan peut être enregistré pendant les appels réseau : préserver
+    // les événements ajoutés depuis la lecture initiale de la file.
+    final latest = prefs.getStringList(_queueKey) ?? <String>[];
+    final original = rawPending.toSet();
+    final fresh = latest.where((raw) => !original.contains(raw)).toList();
+    final preserved = <String>[...remaining, ...fresh];
+    if (preserved.length != latest.length ||
+        !List.generate(preserved.length, (i) => preserved[i] == latest[i])
+            .every((same) => same)) {
+      if (!await prefs.setStringList(_queueKey, preserved)) {
         throw StateError('Journal local non mis à jour : relancer la synchronisation.');
       }
     }
+    final pendingBadges = <String, String>{};
+    for (final raw in preserved) {
+      try {
+        final event = (jsonDecode(raw) as List).cast<String>();
+        if (event.length == 13 && event[4] == 'NFC' &&
+            event[5] == 'AFFECTATION' && event[3].isNotEmpty &&
+            event[2].trim().isNotEmpty) {
+          pendingBadges[event[3]] = event[2].trim().toUpperCase();
+        }
+      } catch (_) {
+        // Les événements invalides restent conservés dans la file.
+      }
+    }
+
     return BadgeSyncResult(
       sharedBadges: Map.unmodifiable(activeByMember),
       conflicts: List.unmodifiable(conflicts),
       uploaded: accepted.length,
-      pending: remaining.length,
+      pending: preserved.length,
+      pendingBadges: Map.unmodifiable(pendingBadges),
     );
   }
 }
