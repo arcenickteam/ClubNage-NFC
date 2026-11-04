@@ -91,6 +91,8 @@ class LocalAttendanceStore {
     'timestamp': r.timestamp.toIso8601String(),
     'status': r.status.name,
     'method': r.method,
+    'revision': r.revision,
+    'updatedAt': r.updatedAt?.toIso8601String(),
   };
 
   static AttendanceRecord _decodeRecord(Map<String, dynamic> r) => AttendanceRecord(
@@ -100,6 +102,8 @@ class LocalAttendanceStore {
     timestamp: DateTime.parse(r['timestamp'] as String),
     status: AttendanceStatus.values.byName(r['status'] as String),
     method: r['method'] as String,
+    revision: r['revision'] as int? ?? 0,
+    updatedAt: _date(r['updatedAt']),
   );
 
   static DateTime? _date(dynamic value) => value == null ? null : DateTime.parse(value as String);

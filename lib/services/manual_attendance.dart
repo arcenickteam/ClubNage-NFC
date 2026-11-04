@@ -22,6 +22,8 @@ class ManualAttendance {
       memberId: memberId, groupId: session.groupId, sessionId: session.id,
       timestamp: previous.isEmpty ? now : previous.first.timestamp,
       status: status, method: method,
+      revision: previous.isEmpty ? 0 : previous.first.revision + 1,
+      updatedAt: now,
     );
   }
 }

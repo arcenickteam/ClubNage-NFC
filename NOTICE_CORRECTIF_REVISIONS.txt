@@ -1,0 +1,17 @@
+Correctif V7.23 - synchronisation de revisions
+
+Source: archive ClubNage-NFC_V7.23_Source.zip fournie le 04/11/2026.
+Ce ZIP ne contient que les 7 fichiers modifies, aucun secret, aucune cle.
+
+Changements:
+- revision/updatedAt du pointage, sauvegarde locale retrocompatible
+- mise a jour Excel en conservant les 13 colonnes historiques et ajoutant Revision/Derniere_modification
+- une correction revision N+1 remplace la ligne de meme ID; une copie ancienne n'ecrase pas la nouvelle
+- conflits de meme revision et statuts divergents signales, non ecrases
+- fusion des records dans main corrigee pour respecter les revisions
+- 2 tests supplementaires multi-telephones/conflits
+
+IMPORTANT: NON COMPILE / NON TESTE ICI (Flutter indisponible).
+Ne pas deployer sur les telephones ni remplacer le classeur de production avant CI vert et sauvegarde du classeur.
+Appliquer uniquement sur la branche v7.23-synchronisation-historique.
+Attention: une migration des en-tetes Excel a 15 colonnes est effectuee lors de la premiere ecriture corrigee.

@@ -82,7 +82,8 @@ class KdriveAttendanceSync {
       record.memberId, member?.lastName ?? '', member?.firstName ?? '',
       session?.label ?? record.groupId, record.groupId,
       record.sessionId ?? '', record.method, 'ClubNage Android', syncDate,
-      _statusLabel(record.status),
+      _statusLabel(record.status), record.revision.toString(),
+      (record.updatedAt ?? record.timestamp).toUtc().toIso8601String(),
     ];
   }
 
@@ -102,6 +103,8 @@ class KdriveAttendanceSync {
       sessionId: row[8].isEmpty ? null : row[8],
       timestamp: stamp.toLocal(), status: _parseStatus(row[12]),
       method: row[9],
+      revision: row.length > 13 ? (int.tryParse(row[13]) ?? 0) : 0,
+      updatedAt: row.length > 14 ? DateTime.tryParse(row[14]) : null,
     );
   }
 
@@ -162,9 +165,11 @@ class KdriveAttendanceSync {
     final before = await api.downloadWorkbook(InfomaniakKdriveService.scheduleName);
     final oldPointages = _sheetOrEmpty(before, XlsxPointageWriter.sheetName);
     final oldSessions = _sheetOrEmpty(before, sessionSheet);
-    if (oldPointages.isNotEmpty &&
-        (oldPointages.first.length != XlsxPointageWriter.headers.length ||
-         !_sameSession(oldPointages.first, XlsxPointageWriter.headers))) {
+    final legacyPointages = oldPointages.isNotEmpty &&
+        oldPointages.first.length == 13 &&
+        _sameSession(oldPointages.first, XlsxPointageWriter.headers.sublist(0, 13));
+    if (oldPointages.isNotEmpty && !legacyPointages &&
+        !_sameSession(oldPointages.first, XlsxPointageWriter.headers)) {
       throw StateError('En-têtes Pointages NFC incompatibles : aucune écriture.');
     }
     if (oldSessions.isNotEmpty &&
@@ -233,6 +238,8 @@ class KdriveAttendanceSync {
     }
 
     final people = {for (final m in members) m.id: m};
+    // Les lignes anciennes ont une revision implicite 0.
+    // Ne jamais utiliser Date_synchronisation comme horodatage metier.
     final localPointages = {for (final r in records.where(_canUpload)) recordId(r): r};
     final newPointages = <List<String>>[];
     final syncDate = DateTime.now().toIso8601String();
@@ -241,8 +248,14 @@ class KdriveAttendanceSync {
       final previous = remotePointages[entry.key];
       if (previous == null) {
         newPointages.add(row);
-      } else if (!samePointage(previous, row)) {
-        conflicts.add('Pointage ${entry.key} différent sur kDrive : conservé sans écrasement.');
+      } else {
+        final remoteRevision = previous.length > 13 ? (int.tryParse(previous[13]) ?? 0) : 0;
+        if (entry.value.revision > remoteRevision) {
+          newPointages.add(row);
+        } else if (entry.value.revision == remoteRevision &&
+            previous[12] != row[12]) {
+          conflicts.add('Pointage ${entry.key} : revisions concurrentes, aucune ecriture.');
+        }
       }
     }
 
@@ -283,10 +296,12 @@ class KdriveAttendanceSync {
     final allRecords = <String, AttendanceRecord>{...localPointages};
     var importedPointages = 0;
     for (final entry in confirmedPointages.entries) {
-      if (allRecords.containsKey(entry.key)) continue;
       final remote = _decodeRecord(entry.value);
-      allRecords[entry.key] = remote;
-      importedPointages++;
+      final local = allRecords[entry.key];
+      if (local == null || remote.revision > local.revision) {
+        allRecords[entry.key] = remote;
+        importedPointages++;
+      }
     }
     return AttendanceSyncResult(
       sessions: allSessions.values.toList(), records: allRecords.values.toList(),

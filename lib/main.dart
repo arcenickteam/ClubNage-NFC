@@ -2587,7 +2587,10 @@ class _ClubNageHomeState extends State<ClubNageHome> with WidgetsBindingObserver
             for (final record in synced.records)
               KdriveAttendanceSync.recordId(record): record,
             for (final record in records)
-              KdriveAttendanceSync.recordId(record): record,
+              if (!synced.records.any((remote) =>
+                  KdriveAttendanceSync.recordId(remote) == KdriveAttendanceSync.recordId(record) &&
+                  remote.revision >= record.revision))
+                KdriveAttendanceSync.recordId(record): record,
           };
           // Plusieurs appareils peuvent pointer le même licencié : un seul
           // état effectif par séance, avec priorité aux présences sur absences.
@@ -2606,9 +2609,11 @@ class _ClubNageHomeState extends State<ClubNageHome> with WidgetsBindingObserver
             }
             final key = '${record.sessionId ?? ''}|${record.memberId}';
             final current = effective[key];
-            if (current == null || rank(record.status) > rank(current.status) ||
-                (rank(record.status) == rank(current.status) &&
-                 record.timestamp.isBefore(current.timestamp))) {
+            if (current == null || record.revision > current.revision ||
+                (record.revision == current.revision &&
+                 (record.timestamp.isAfter(current.timestamp) ||
+                  (record.timestamp.isAtSameMomentAs(current.timestamp) &&
+                   rank(record.status) > rank(current.status))))) {
               effective[key] = record;
             }
           }

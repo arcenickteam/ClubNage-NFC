@@ -64,9 +64,44 @@ void main() {
         status: AttendanceStatus.absent, now: now.add(const Duration(minutes: 5)));
     expect(await sync(drive, data), 1);
     expect(rows(drive).length, 4);
-    expect(rows(drive)[1].last, 'Absent');
+    expect(rows(drive)[1][12], 'Absent');
     expect(await sync(drive, data), 0);
     expect(ZipDecoder().decodeBytes(drive.bytes).findFile('xl/worksheets/sheet1.xml')!.content, original);
+  });
+
+  test('telephone B recupere une correction du telephone A', () async {
+    final drive = MemoryDrive();
+    final first = record('m1', AttendanceStatus.present);
+    await KdriveAttendanceSync(drive).synchronize(
+        records: [first], sessions: [session], members: []);
+    final corrected = ManualAttendance.update(
+        records: [first], session: session, memberId: 'm1',
+        status: AttendanceStatus.absent,
+        now: now.add(const Duration(minutes: 5)));
+    await KdriveAttendanceSync(drive).synchronize(
+        records: [corrected], sessions: [session], members: []);
+    final result = await KdriveAttendanceSync(drive).synchronize(
+        records: [first], sessions: [session], members: []);
+    expect(result.records.single.status, AttendanceStatus.absent);
+    expect(result.records.single.revision, 1);
+    expect(rows(drive).length, 2);
+  });
+
+  test('deux corrections concurrentes meme revision ne sont pas ecrasees', () async {
+    final drive = MemoryDrive();
+    final first = record('m1', AttendanceStatus.present);
+    await sync(drive, [first]);
+    final a = ManualAttendance.update(records: [first], session: session,
+        memberId: 'm1', status: AttendanceStatus.absent,
+        now: now.add(const Duration(minutes: 5)));
+    final b = ManualAttendance.update(records: [first], session: session,
+        memberId: 'm1', status: AttendanceStatus.late,
+        now: now.add(const Duration(minutes: 6)));
+    await sync(drive, [a]);
+    final result = await KdriveAttendanceSync(drive).synchronize(
+        records: [b], sessions: [session], members: []);
+    expect(result.conflicts, isNotEmpty);
+    expect(rows(drive)[1][12], 'Absent');
   });
 
   test('réponse perdue après écriture : nouvel essai sans doublon', () async {

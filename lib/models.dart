@@ -140,7 +140,8 @@ class AttendanceRecord {
   final DateTime timestamp;
   final AttendanceStatus status;
   final String method;
-
+  final int revision;
+  final DateTime? updatedAt;
   const AttendanceRecord({
     required this.memberId,
     required this.groupId,
@@ -148,5 +149,7 @@ class AttendanceRecord {
     required this.timestamp,
     required this.status,
     required this.method,
+    this.revision = 0,
+    this.updatedAt,
   });
 }

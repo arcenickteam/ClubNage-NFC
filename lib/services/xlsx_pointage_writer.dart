@@ -11,7 +11,7 @@ class XlsxPointageWriter {
   static const headers = <String>[
     'ID_Pointage', 'Date', 'Heure', 'Licencie_ID', 'Nom', 'Prénom',
     'Activité', 'Groupe', 'Séance', 'Type_badge', 'Appareil_ID',
-    'Date_synchronisation', 'Statut',
+    'Date_synchronisation', 'Statut', 'Revision', 'Derniere_modification',
   ];
   static const _mainNs = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main';
   static const _relNs = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
@@ -56,10 +56,19 @@ class XlsxPointageWriter {
       (e) => e.name.local == 'sheet' && e.getAttribute('name') == targetSheetName,
     ).toList();
     final existingRows = existing.isEmpty ? <List<String>>[] : XlsxDataReader.readSheet(bytes, targetSheetName);
-    if (existingRows.isNotEmpty && !_sameHeader(existingRows.first, targetHeaders)) {
+    final legacyPointages = targetSheetName == sheetName &&
+        existingRows.isNotEmpty && existingRows.first.length == 13 &&
+        _sameHeader(existingRows.first, targetHeaders.sublist(0, 13));
+    if (existingRows.isNotEmpty && !legacyPointages && !_sameHeader(existingRows.first, targetHeaders)) {
       throw StateError('Onglet $targetSheetName avec colonnes incompatibles. Aucun fichier modifié.');
     }
-    final rows = <List<String>>[targetHeaders, ...existingRows.skip(1).map((r) => List<String>.of(r))];
+    final rows = <List<String>>[targetHeaders, ...existingRows.skip(1).map((r) {
+      final values = List<String>.of(r);
+      if (legacyPointages) {
+        while (values.length < targetHeaders.length) { values.add(''); }
+      }
+      return values;
+    })];
     final indices = <String, int>{};
     for (var i = 1; i < rows.length; i++) {
       if (rows[i].isNotEmpty && rows[i].first.trim().isNotEmpty) {
