@@ -26,7 +26,10 @@ class XlsxPointageWriter {
     return s;
   }
 
-  static Uint8List merge(Uint8List bytes, List<List<String>> additions) {
+  static Uint8List merge(Uint8List bytes, List<List<String>> additions, {
+    String targetSheetName = sheetName,
+    List<String> targetHeaders = headers,
+  }) {
     final source = ZipDecoder().decodeBytes(bytes, verify: true);
     final parts = <String, List<int>>{};
     for (final file in source.files) {
@@ -50,13 +53,13 @@ class XlsxPointageWriter {
     final rels = XmlDocument.parse(read('xl/_rels/workbook.xml.rels'));
     final contentTypes = XmlDocument.parse(read('[Content_Types].xml'));
     final existing = workbook.descendants.whereType<XmlElement>().where(
-      (e) => e.name.local == 'sheet' && e.getAttribute('name') == sheetName,
+      (e) => e.name.local == 'sheet' && e.getAttribute('name') == targetSheetName,
     ).toList();
-    final existingRows = existing.isEmpty ? <List<String>>[] : XlsxDataReader.readSheet(bytes, sheetName);
-    if (existingRows.isNotEmpty && !_sameHeader(existingRows.first)) {
-      throw StateError('Onglet Pointages NFC existant avec colonnes incompatibles. Aucun fichier modifié.');
+    final existingRows = existing.isEmpty ? <List<String>>[] : XlsxDataReader.readSheet(bytes, targetSheetName);
+    if (existingRows.isNotEmpty && !_sameHeader(existingRows.first, targetHeaders)) {
+      throw StateError('Onglet $targetSheetName avec colonnes incompatibles. Aucun fichier modifié.');
     }
-    final rows = <List<String>>[headers, ...existingRows.skip(1).map((r) => List<String>.of(r))];
+    final rows = <List<String>>[targetHeaders, ...existingRows.skip(1).map((r) => List<String>.of(r))];
     final indices = <String, int>{};
     for (var i = 1; i < rows.length; i++) {
       if (rows[i].isNotEmpty && rows[i].first.trim().isNotEmpty) {
@@ -68,8 +71,8 @@ class XlsxPointageWriter {
     }
     if (additions.isEmpty) return bytes;
     for (final row in additions) {
-      if (row.length != headers.length || row.first.trim().isEmpty) {
-        throw ArgumentError('Pointage invalide : 13 colonnes et ID requis.');
+      if (row.length != targetHeaders.length || row.first.trim().isEmpty) {
+        throw ArgumentError('Ligne invalide dans $targetSheetName : ${targetHeaders.length} colonnes et ID requis.');
       }
       final index = indices[row.first.trim()];
       if (index == null) {
@@ -108,7 +111,7 @@ class XlsxPointageWriter {
       while (parts.containsKey('xl/worksheets/sheet$index.xml')) { index++; }
       sheetPath = 'xl/worksheets/sheet$index.xml';
       sheets.children.add(XmlElement(XmlName('sheet'), [
-        XmlAttribute(XmlName('name'), sheetName),
+        XmlAttribute(XmlName('name'), targetSheetName),
         XmlAttribute(XmlName('sheetId'), '${maxSheetId + 1}'),
         XmlAttribute(XmlName('id', 'r'), 'rId$nextRel'),
       ]));
@@ -139,7 +142,7 @@ class XlsxPointageWriter {
     return Uint8List.fromList(ZipEncoder().encode(result)!);
   }
 
-  static bool _sameHeader(List<String> row) =>
-      (row.length == 12 || row.length == headers.length) &&
-      List.generate(row.length, (i) => row[i].trim() == headers[i]).every((x) => x);
+  static bool _sameHeader(List<String> row, List<String> expected) =>
+      row.length == expected.length &&
+      List.generate(row.length, (i) => row[i].trim() == expected[i]).every((x) => x);
 }

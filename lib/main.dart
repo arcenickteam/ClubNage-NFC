@@ -1733,12 +1733,40 @@ class _ClubNageHomeState extends State<ClubNageHome> with WidgetsBindingObserver
     });
   }
 
+  // Tri alphabétique francophone simple, sans dépendance externe.
+  String _alphabeticalKey(String value) {
+    var key = value.trim().toLowerCase();
+    const replacements = <String, String>{
+      'à':'a', 'â':'a', 'ä':'a', 'á':'a', 'ã':'a',
+      'ç':'c', 'é':'e', 'è':'e', 'ê':'e', 'ë':'e',
+      'î':'i', 'ï':'i', 'í':'i', 'ô':'o', 'ö':'o',
+      'ù':'u', 'û':'u', 'ü':'u', 'ú':'u', 'ÿ':'y',
+      'œ':'oe', 'æ':'ae',
+    };
+    for (final entry in replacements.entries) {
+      key = key.replaceAll(entry.key, entry.value);
+    }
+    return key;
+  }
+
   Widget _membersPage() {
     final filtered = members.where((m) {
-      final matchesText = m.fullName.toLowerCase().contains(memberSearch.toLowerCase());
+      final matchesText = m.fullName.toLowerCase().contains(memberSearch.toLowerCase()) ||
+          '${m.lastName} ${m.firstName}'.toLowerCase().contains(memberSearch.toLowerCase());
       final matchesGroup = memberGroupFilter == 'all' || m.groups.contains(memberGroupFilter);
       return matchesText && matchesGroup;
-    }).toList();
+    }).toList()
+      ..sort((a, b) {
+        final bySurname = _alphabeticalKey(a.lastName)
+            .compareTo(_alphabeticalKey(b.lastName));
+        if (bySurname != 0) return bySurname;
+        final byFirstName = _alphabeticalKey(a.firstName)
+            .compareTo(_alphabeticalKey(b.firstName));
+        return byFirstName != 0 ? byFirstName : a.id.compareTo(b.id);
+      });
+    final sortedGroups = groups.toList()
+      ..sort((a, b) => _alphabeticalKey(a.name)
+          .compareTo(_alphabeticalKey(b.name)));
     return ListView(padding: const EdgeInsets.all(16), children: [
       TextField(onChanged: (v) => setState(() => memberSearch = v), decoration: const InputDecoration(prefixIcon: Icon(Icons.search), hintText: 'Rechercher un licencié')),
       const SizedBox(height: 10),
@@ -1747,14 +1775,16 @@ class _ClubNageHomeState extends State<ClubNageHome> with WidgetsBindingObserver
         decoration: const InputDecoration(prefixIcon: Icon(Icons.groups_outlined), labelText: 'Filtrer par groupe'),
         items: [
           const DropdownMenuItem(value: 'all', child: Text('Tous les groupes')),
-          ...groups.map((g) => DropdownMenuItem(value: g.id, child: Text(g.name))),
+          ...sortedGroups.map((g) => DropdownMenuItem(value: g.id, child: Text(g.name))),
         ],
         onChanged: (v) { if (v != null) setState(() => memberGroupFilter = v); },
       ),
+      const SizedBox(height: 8),
+      const Text('Classement : nom de famille (A–Z)', style: TextStyle(color: Colors.white60, fontSize: 12)),
       const SizedBox(height: 12),
       ...filtered.map((m) => Card(child: ListTile(
         leading: CircleAvatar(child: Text(m.firstName.substring(0, 1))),
-        title: Text(m.fullName, style: const TextStyle(fontWeight: FontWeight.w700)),
+        title: Text('${m.lastName.toUpperCase()} ${m.firstName}', style: const TextStyle(fontWeight: FontWeight.w700)),
         subtitle: Text('${_groupNames(m.groups)}\nDossier : ${m.dossierStatus}'),
         isThreeLine: true,
         trailing: Icon(assignedUids.containsKey(m.id) ? Icons.nfc : Icons.nfc_outlined, color: assignedUids.containsKey(m.id) ? green : orange),
@@ -2538,12 +2568,73 @@ class _ClubNageHomeState extends State<ClubNageHome> with WidgetsBindingObserver
       }
 
       try {
-        final count = await KdriveAttendanceSync(InfomaniakKdriveService())
+        final synced = await KdriveAttendanceSync(InfomaniakKdriveService())
             .synchronize(records: List.of(records),
                 sessions: List.of(sessions), members: List.of(members));
-        messages.add('Présences : $count pointage(s) transmis.');
+        if (mounted) {
+          // Fusionner avec l'état ACTUEL du téléphone : un scan NFC peut avoir
+          // eu lieu pendant les requêtes réseau. Ne jamais remplacer à l'aveugle.
+          final allSessions = <String, TrainingSession>{
+            for (final session in synced.sessions) session.id: session,
+          };
+          for (final local in sessions) {
+            final remote = allSessions[local.id];
+            if (remote == null || (remote.isOpen && !local.isOpen)) {
+              allSessions[local.id] = local;
+            }
+          }
+          final allRecords = <String, AttendanceRecord>{
+            for (final record in synced.records)
+              KdriveAttendanceSync.recordId(record): record,
+            for (final record in records)
+              KdriveAttendanceSync.recordId(record): record,
+          };
+          // Plusieurs appareils peuvent pointer le même licencié : un seul
+          // état effectif par séance, avec priorité aux présences sur absences.
+          final effective = <String, AttendanceRecord>{};
+          final audits = <AttendanceRecord>[];
+          int rank(AttendanceStatus status) {
+            if (status == AttendanceStatus.present ||
+                status == AttendanceStatus.late) return 2;
+            if (status == AttendanceStatus.absent) return 1;
+            return 0;
+          }
+          for (final record in allRecords.values) {
+            if (record.status == AttendanceStatus.refused) {
+              audits.add(record);
+              continue;
+            }
+            final key = '${record.sessionId ?? ''}|${record.memberId}';
+            final current = effective[key];
+            if (current == null || rank(record.status) > rank(current.status) ||
+                (rank(record.status) == rank(current.status) &&
+                 record.timestamp.isBefore(current.timestamp))) {
+              effective[key] = record;
+            }
+          }
+          setState(() {
+            sessions..clear()..addAll(allSessions.values);
+            records..clear()..addAll(effective.values)..addAll(audits);
+            if (activeSession != null) {
+              activeSession = allSessions[activeSession!.id];
+              if (activeSession?.isOpen != true) {
+                activeSession = null;
+                sessionOpen = false;
+              }
+            }
+          });
+          _saveAttendance();
+          _reconcileSessions();
+        }
+        messages.add('Séances : ${synced.uploadedSessions} envoyée(s), '
+            '${synced.importedSessions} récupérée(s).');
+        messages.add('Présences : ${synced.uploadedPointages} envoyée(s), '
+            '${synced.importedPointages} récupérée(s).');
+        if (synced.conflicts.isNotEmpty) {
+          messages.add('À vérifier : ${synced.conflicts.join(' ; ')}');
+        }
       } catch (e) {
-        messages.add('Présences : échec, pointages locaux conservés : $e');
+        messages.add('Séances / présences : échec, données locales conservées : $e');
       }
       if (mounted) setState(() => _kdriveSyncMessage = messages.join('\n'));
     } catch (e) {
@@ -2580,14 +2671,14 @@ class _ClubNageHomeState extends State<ClubNageHome> with WidgetsBindingObserver
       const ListTile(
         leading: Icon(Icons.cloud_sync_outlined, color: cyan),
         title: Text('kDrive · NFC / QR / Manuel'),
-        subtitle: Text('Envoi vers l’onglet Pointages NFC du classeur de suivi.'),
+        subtitle: Text('Échange des séances, pointages et badges avec kDrive.'),
       ),
       Text(_kdriveSyncMessage),
       const SizedBox(height: 8),
       FilledButton.icon(
         onPressed: _syncingKdrive ? null : _syncAttendanceToKdrive,
         icon: Icon(_syncingKdrive ? Icons.hourglass_top : Icons.cloud_upload_outlined),
-        label: Text(_syncingKdrive ? 'Synchronisation…' : 'SYNCHRONISER BADGES ET PRÉSENCES'),
+        label: Text(_syncingKdrive ? 'Synchronisation…' : 'SYNCHRONISER BADGES, SÉANCES ET PRÉSENCES'),
       ),
     ]),
   ));

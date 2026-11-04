@@ -1,0 +1,39 @@
+CLUBNAGE-NFC V7.23 — CANDIDAT DE TEST MULTI-TELEPHONES
+
+OBJECTIFS
+- Liste des licenciés triée par nom de famille A-Z (accents français normalisés).
+- Filtre Tous les groupes ou un groupe, lui aussi classé alphabétiquement.
+- Synchronisation bidirectionnelle de l'historique des séances ET des pointages.
+- Les badges NFC et le planning complet V7.22 sont conservés.
+- Aucun effacement automatique des données locales.
+
+MODIFICATIONS
+- lib/main.dart (reprend le correctif cumulatif planning + pointage manuel V7.22)
+- lib/services/kdrive_attendance_sync.dart
+- lib/services/xlsx_pointage_writer.dart
+- pubspec.yaml
+- .github/workflows/build-android-apk.yml
+
+FONCTIONNEMENT
+- Le nouveau journal « Sessions NFC » est créé automatiquement dans le
+  classeur de suivi sur kDrive lors de la première synchronisation de V7.23.
+- Les données des onglets existants sont conservées.
+- Les séances et pointages partagés sont rapatriés sur le téléphone et
+  sauvegardés localement. Les statistiques sont recalculées sur cette base.
+- Un événement de pointage existant et contradictoire n'est pas écrasé
+  silencieusement : un message de conflit est affiché.
+- Les séances partagées sont identifiées par leur ID, ce qui évite de
+  les compter plusieurs fois après plusieurs synchronisations.
+
+IMPORTANT : PAS ENCORE COMPILE NI TESTE SUR ANDROID.
+- Conserver l'APK V7.22 et une copie des deux classeurs kDrive.
+- Ne pas désinstaller les applications existantes.
+- Tester d'abord avec les deux téléphones sur une séance de contrôle,
+  puis vérifier le classeur kDrive et les statistiques.
+- L'historique des séances existantes ne sera partagé que lorsque le
+  téléphone qui le détient aura synchronisé avec V7.23.
+- Le nom personnalisé de l'appareil à l'origine du pointage reste une
+  amélioration distincte à intégrer après validation de ce correctif.
+
+BRANCHE CIBLE : v7.23-synchronisation-historique
+NOM DE L'APK : ClubNage-NFC_V7.23.apk
