@@ -44,8 +44,12 @@ void main() {
   AttendanceRecord record(String id, AttendanceStatus status) => AttendanceRecord(
       memberId: id, groupId: 'g1', sessionId: 's1', timestamp: now,
       status: status, method: 'MANUEL');
-  Future<int> sync(MemoryDrive drive, List<AttendanceRecord> records) =>
-      KdriveAttendanceSync(drive).synchronize(records: records, sessions: [session], members: []);
+  Future<int> sync(MemoryDrive drive, List<AttendanceRecord> records) async =>
+      (await KdriveAttendanceSync(drive).synchronize(
+        records: records,
+        sessions: [session],
+        members: [],
+      )).uploadedPointages;
   List<List<String>> rows(MemoryDrive drive) => XlsxDataReader.readSheet(drive.bytes, 'Pointages NFC');
 
   test('3 pointages restent 3 après répétition; correction sans doublon', () async {
