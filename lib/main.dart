@@ -143,7 +143,8 @@ class _ClubNageHomeState extends State<ClubNageHome> with WidgetsBindingObserver
 
 
 
-  // Créneaux « Validé » du référentiel V8. Les créneaux à confirmer ne sont pas auto-ouverts.
+  // Les 26 créneaux « Validé » du Planning référentiel V8 (kDrive).
+  // Ne pas inclure les séances « Sur demande » dans les ouvertures automatiques.
   static const _weeklySlots = <Map<String, Object>>[
     {'id':'officiel-01','label':'Junior','groups':['Junior'],'weekday':1,'start':'18:45','end':'20:30'},
     {'id':'officiel-02','label':'Junior','groups':['Junior'],'weekday':2,'start':'19:15','end':'20:45'},
@@ -164,10 +165,32 @@ class _ClubNageHomeState extends State<ClubNageHome> with WidgetsBindingObserver
     {'id':'officiel-17','label':'Adultes','groups':['Adultes'],'weekday':1,'start':'19:30','end':'20:30'},
     {'id':'officiel-18','label':'Adultes','groups':['Adultes'],'weekday':4,'start':'12:00','end':'13:00'},
     {'id':'officiel-19','label':'Adultes','groups':['Adultes'],'weekday':4,'start':'19:30','end':'20:30'},
+    // V7.22 : créneaux manquants du référentiel officiel (Jaunes et Aquaforme).
+    // Les identifiants de groupe doivent correspondre exactement à la colonne
+    // « Créneau » de la base licenciés pour respecter les autorisations V8.
+    {'id':'officiel-20','label':'Débutants – Jaune M','groups':['Jaune M'],'weekday':3,'start':'11:00','end':'11:45'},
+    {'id':'officiel-21','label':'Débutants – Jaune S1','groups':['Jaune S1'],'weekday':6,'start':'09:30','end':'10:15'},
+    {'id':'officiel-22','label':'Débutants – Jaune S2','groups':['Jaune S2'],'weekday':6,'start':'10:15','end':'11:00'},
+    {'id':'officiel-23','label':'Aquaforme / Aquagym – Aqua M1','groups':['Aqua M1'],'weekday':3,'start':'10:00','end':'11:00'},
+    {'id':'officiel-24','label':'Aquaforme / Aquagym – Aqua M2','groups':['Aqua M2'],'weekday':3,'start':'12:30','end':'13:30'},
+    {'id':'officiel-25','label':'Aquaforme / Aquagym – Aqua V','groups':['Aqua V'],'weekday':5,'start':'20:00','end':'21:00'},
+    {'id':'officiel-26','label':'Aquaforme / Aquagym – Aqua S','groups':['Aqua S'],'weekday':6,'start':'09:00','end':'09:30'},
   ];
   String _dayName(int w) => const ['', 'Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi','Dimanche'][w];
   DateTime _at(DateTime d,String t){final p=t.split(':');return DateTime(d.year,d.month,d.day,int.parse(p[0]),int.parse(p[1]));}
-  List<Map<String,Object>> get _todaySlots => _weeklySlots.where((s)=>s['weekday']==DateTime.now().weekday).toList();
+  // Afficher le planning chronologiquement, même si les groupes sont
+  // déclarés par famille dans le référentiel statique.
+  List<Map<String,Object>> get _sortedWeeklySlots {
+    final sorted = _weeklySlots.toList();
+    sorted.sort((a, b) {
+      final byDay = (a['weekday'] as int).compareTo(b['weekday'] as int);
+      return byDay != 0 ? byDay :
+          (a['start'] as String).compareTo(b['start'] as String);
+    });
+    return sorted;
+  }
+  List<Map<String,Object>> get _todaySlots => _sortedWeeklySlots
+      .where((s) => s['weekday'] == DateTime.now().weekday).toList();
   List<String> _slotGroups(Map<String,Object> s)=>List<String>.from(s['groups'] as List);
   bool _slotCanOpen(Map<String,Object> s){final n=DateTime.now(),st=_at(n,s['start'] as String),en=_at(n,s['end'] as String);return !n.isBefore(st.subtract(const Duration(minutes:30)))&&n.isBefore(en.add(const Duration(minutes:15)));}
   List<Member> _membersForGroups(List<String> ids)=>members.where((m)=>ids.any((id)=>SlotAuthorization.permission(m,id)==SlotPermission.authorized)).toList();
@@ -1475,6 +1498,23 @@ class _ClubNageHomeState extends State<ClubNageHome> with WidgetsBindingObserver
                   minimumSize: const Size.fromHeight(52),
                 ),
               ),
+
+              // Accès direct à l'appel manuel pour la séance sélectionnée.
+              // _go(5) arrête le lecteur NFC si nécessaire et conserve
+              // activeSession : aucune séance exceptionnelle n'est créée.
+              const SizedBox(height: 9),
+              OutlinedButton.icon(
+                onPressed: sessionOpen && !_closingSession &&
+                        _attendanceError == null
+                    ? () => _go(5)
+                    : null,
+                icon: const Icon(Icons.edit_note_rounded),
+                label: const Text('POINTAGE MANUEL'),
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size.fromHeight(52),
+                  foregroundColor: cyan,
+                ),
+              ),
             ],
           ),
         ),
@@ -1781,7 +1821,7 @@ class _ClubNageHomeState extends State<ClubNageHome> with WidgetsBindingObserver
       const SizedBox(height:18),
       const Text('Planning hebdomadaire',style:TextStyle(fontSize:19,fontWeight:FontWeight.w900)),
       const SizedBox(height:8),
-      ..._weeklySlots.map((slot)=>ListTile(dense:true,leading:const Icon(Icons.event_outlined),title:Text(slot['label'] as String),subtitle:Text('${_dayName(slot['weekday'] as int)} • ${slot['start']}–${slot['end']}'))),
+      ..._sortedWeeklySlots.map((slot)=>ListTile(dense:true,leading:const Icon(Icons.event_outlined),title:Text(slot['label'] as String),subtitle:Text('${_dayName(slot['weekday'] as int)} • ${slot['start']}–${slot['end']}'))),
     ]);
   }
 
