@@ -104,6 +104,23 @@ void main() {
     expect(rows(drive)[1][12], 'Absent');
   });
 
+  test('séance clôturée : correction autorisée, identité et révision conservées', () {
+    final first = record('m1', AttendanceStatus.present);
+    final closed = session.close(now.add(const Duration(hours: 1)));
+    expect(() => ManualAttendance.update(records: [first], session: closed,
+        memberId: 'm1', status: AttendanceStatus.absent, now: now), throwsStateError);
+    final corrected = ManualAttendance.update(records: [first], session: closed,
+        memberId: 'm1', status: AttendanceStatus.absent,
+        now: now.add(const Duration(hours: 2)),
+        authorizedClosedCorrection: true);
+    expect(corrected.status, AttendanceStatus.absent);
+    expect(corrected.revision, first.revision + 1);
+    expect(KdriveAttendanceSync.recordId(corrected), KdriveAttendanceSync.recordId(first));
+    expect(() => ManualAttendance.update(records: [], session: closed,
+        memberId: 'm2', status: AttendanceStatus.present,
+        now: now, authorizedClosedCorrection: true), throwsStateError);
+  });
+
   test('réponse perdue après écriture : nouvel essai sans doublon', () async {
     final drive = MemoryDrive()..loseAcknowledgement = true;
     final data = [record('m1', AttendanceStatus.late)];

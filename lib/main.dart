@@ -1904,6 +1904,82 @@ class _ClubNageHomeState extends State<ClubNageHome> with WidgetsBindingObserver
     }
   }
 
+  // Correction exceptionnelle d'un pointage existant, sans rouvrir la séance.
+  Future<void> _correctClosedAttendance(AttendanceRecord original) async {
+    if (!_attendanceLoaded || _attendanceError != null || _closingSession) return;
+    final session = sessions.where((s) => s.id == original.sessionId).firstOrNull;
+    if (session == null || session.isOpen) return;
+    final controller = TextEditingController();
+    final authorized = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Correction après clôture'),
+        content: TextField(
+          controller: controller,
+          obscureText: true,
+          keyboardType: TextInputType.number,
+          decoration: const InputDecoration(labelText: 'Code d’autorisation'),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('ANNULER')),
+          FilledButton(onPressed: () => Navigator.pop(dialogContext,
+              controller.text.trim() == '1998'), child: const Text('VALIDER')),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (!mounted || authorized != true) {
+      if (mounted && authorized == false) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Correction annulée ou code incorrect.')));
+      }
+      return;
+    }
+    final selected = await showDialog<AttendanceStatus>(
+      context: context,
+      builder: (dialogContext) => SimpleDialog(
+        title: Text('Corriger : ${_memberById(original.memberId).fullName}'),
+        children: [
+          for (final status in [AttendanceStatus.present,
+              AttendanceStatus.late, AttendanceStatus.absent])
+            SimpleDialogOption(
+              onPressed: () => Navigator.pop(dialogContext, status),
+              child: Text(_attendanceLabel(status)),
+            ),
+        ],
+      ),
+    );
+    if (!mounted || selected == null || selected == original.status) return;
+    try {
+      // Relecture de l'état courant pour éviter d'écraser une correction locale.
+      final latest = records.where((r) => r.sessionId == session.id &&
+          r.memberId == original.memberId &&
+          r.status != AttendanceStatus.refused).toList();
+      if (latest.length != 1 || latest.first.revision != original.revision ||
+          latest.first.status != original.status) {
+        throw StateError('Le pointage a changé : recommencez la correction.');
+      }
+      final corrected = ManualAttendance.update(
+        records: latest, session: session, memberId: original.memberId,
+        status: selected, now: DateTime.now(),
+        method: 'MANUEL', authorizedClosedCorrection: true);
+      setState(() {
+        records.removeWhere((r) => r.sessionId == session.id &&
+            r.memberId == original.memberId &&
+            r.status != AttendanceStatus.refused);
+        records.add(corrected);
+      });
+      await _saveAttendance();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Correction enregistrée localement. Synchronisez kDrive.')));
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('$e')));
+    }
+  }
+
   String _presenceSearch = '';
 
   Widget _presencePage() {
@@ -1955,7 +2031,20 @@ class _ClubNageHomeState extends State<ClubNageHome> with WidgetsBindingObserver
       }),
       const SizedBox(height: 12),
       const Text('Historique', style: TextStyle(fontSize: 19, fontWeight: FontWeight.w800)),
-      for (final r in records.reversed) ListTile(dense: true, leading: const Icon(Icons.history), title: Text(_memberById(r.memberId).fullName), subtitle: Text('${_sessionLabelForRecord(r)} • ${_attendanceLabel(r.status)} • ${_time(r.timestamp)} • ${r.method}')),
+      for (final r in records.reversed) ListTile(
+        dense: true,
+        leading: const Icon(Icons.history),
+        title: Text(_memberById(r.memberId).fullName),
+        subtitle: Text('${_sessionLabelForRecord(r)} • ${_attendanceLabel(r.status)} • ${_time(r.timestamp)} • ${r.method}'),
+        trailing: sessions.any((s) => s.id == r.sessionId && !s.isOpen) &&
+                r.status != AttendanceStatus.refused
+            ? IconButton(
+                tooltip: 'Corriger après clôture (code requis)',
+                icon: const Icon(Icons.lock_open_outlined),
+                onPressed: () => _correctClosedAttendance(r),
+              )
+            : null,
+      ),
     ]);
   }
 

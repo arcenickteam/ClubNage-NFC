@@ -9,14 +9,21 @@ class ManualAttendance {
     required AttendanceStatus status,
     required DateTime now,
     String method = 'MANUEL',
+    bool authorizedClosedCorrection = false,
   }) {
-    if (!session.isOpen || !session.expectedMemberIds.contains(memberId)) {
-      throw StateError('Licencié hors séance ou séance fermée.');
+    if (!session.expectedMemberIds.contains(memberId)) {
+      throw StateError('Licencié hors séance.');
+    }
+    if (!session.isOpen && !authorizedClosedCorrection) {
+      throw StateError('Séance fermée : autorisation nécessaire.');
     }
     if (![AttendanceStatus.present, AttendanceStatus.late, AttendanceStatus.absent].contains(status)) {
       throw ArgumentError('Statut non enregistrable.');
     }
     final previous = records.where((r) => r.sessionId == session.id && r.memberId == memberId).toList();
+    if (!session.isOpen && previous.isEmpty) {
+      throw StateError('Correction impossible : aucun pointage initial.');
+    }
     if (previous.length > 1) throw StateError('Plusieurs pointages existent pour ce licencié.');
     return AttendanceRecord(
       memberId: memberId, groupId: session.groupId, sessionId: session.id,

@@ -1,0 +1,6 @@
+V7.24 Etape 3 - correction de pointages existants apres cloture
+
+Application: dans la page Presences, section Historique, toucher le cadenas sur une ligne de seance cloturee, saisir le code convenu, choisir le statut.
+La seance reste fermee; identifiant du pointage preserve, revision incrementee, enregistrement local puis synchronisation manuelle kDrive.
+A TESTER: pas de compilation Flutter locale.
+LIMITES: pas encore de journal immuable des corrections dans Excel; pas encore de suivi des appareils; le code est un verrou fonctionnel et non une securite forte. Ne pas deployer en production.
