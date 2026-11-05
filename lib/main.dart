@@ -2031,6 +2031,10 @@ class _ClubNageHomeState extends State<ClubNageHome> with WidgetsBindingObserver
       }),
       const SizedBox(height: 12),
       const Text('Historique', style: TextStyle(fontSize: 19, fontWeight: FontWeight.w800)),
+      const SizedBox(height: 6),
+      const Text('Pour modifier une présence après clôture, appuyez sur « Corriger » sur la ligne du licencié. Le code 1998 sera demandé.',
+        style: TextStyle(color: Colors.white70)),
+      const SizedBox(height: 8),
       for (final r in records.reversed) ListTile(
         dense: true,
         leading: const Icon(Icons.history),
@@ -2038,10 +2042,10 @@ class _ClubNageHomeState extends State<ClubNageHome> with WidgetsBindingObserver
         subtitle: Text('${_sessionLabelForRecord(r)} • ${_attendanceLabel(r.status)} • ${_time(r.timestamp)} • ${r.method}'),
         trailing: sessions.any((s) => s.id == r.sessionId && !s.isOpen) &&
                 r.status != AttendanceStatus.refused
-            ? IconButton(
-                tooltip: 'Corriger après clôture (code requis)',
-                icon: const Icon(Icons.lock_open_outlined),
+            ? TextButton.icon(
                 onPressed: () => _correctClosedAttendance(r),
+                icon: const Icon(Icons.edit_outlined),
+                label: const Text('Corriger'),
               )
             : null,
       ),
