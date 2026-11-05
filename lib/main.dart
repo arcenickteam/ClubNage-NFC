@@ -1970,7 +1970,7 @@ class _ClubNageHomeState extends State<ClubNageHome> with WidgetsBindingObserver
             r.status != AttendanceStatus.refused);
         records.add(corrected);
       });
-      await _saveAttendance();
+      _saveAttendance();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
         content: Text('Correction enregistrée localement. Synchronisez kDrive.')));
