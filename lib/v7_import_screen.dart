@@ -1,4 +1,5 @@
 import 'dart:typed_data';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'services/infomaniak_kdrive_service.dart';
@@ -321,8 +322,13 @@ class _V7ImportScreenState extends State<V7ImportScreen> {
     final visible = people.where((p) => '${p['nom']} ${p['prenom']} ${p['groupes']} ${p['id']}'
         .toLowerCase().contains(q)).toList();
     return Scaffold(
-      appBar: AppBar(title: const Text('V7.16 · kDrive')),
+      appBar: AppBar(title: const Text('Importation kDrive')),
       body: ListView(padding: const EdgeInsets.all(16), children: [
+        FutureBuilder<PackageInfo>(future: PackageInfo.fromPlatform(),
+          builder: (context, snapshot) => Text(snapshot.hasData
+            ? 'ClubNage-NFC · version installée ${snapshot.data!.version} (${snapshot.data!.buildNumber})'
+            : 'Lecture de la version installée…'),),
+        const SizedBox(height: 8),
         const Text('Importation de la base officielle et du planning depuis kDrive. Les badges et les présences sont synchronisés depuis l’écran principal.'),
         const SizedBox(height: 12),
         FilledButton.icon(onPressed: busy ? null : configureApiToken, icon: const Icon(Icons.key), label: const Text('Configurer le jeton API kDrive')),

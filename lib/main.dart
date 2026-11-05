@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'services/manual_attendance.dart';
 import 'package:flutter/material.dart';
@@ -221,7 +222,7 @@ class _ClubNageHomeState extends State<ClubNageHome> with WidgetsBindingObserver
         const SizedBox(height:12),
         DropdownButtonFormField<String>(initialValue:selectedGroup,decoration:const InputDecoration(labelText:'Groupe'),items:groups.map((g)=>DropdownMenuItem(value:g.id,child:Text(g.name))).toList(),onChanged:(v){if(v!=null)setLocal(()=>selectedGroup=v);}),
         const SizedBox(height:10),
-        const Text('Démarrage immédiat. Fermeture manuelle ou sécurité automatique après 4 h.',style:TextStyle(fontSize:12,color:Colors.white60)),
+        const Text('Démarrage immédiat. Fermeture manuelle ou sécurité automatique après 10 h.',style:TextStyle(fontSize:12,color:Colors.white60)),
       ]),
       actions:[TextButton(onPressed:()=>Navigator.pop(dc,false),child:const Text('ANNULER')),FilledButton(onPressed:()=>Navigator.pop(dc,true),child:const Text('OUVRIR'))],
     )));
@@ -240,9 +241,7 @@ class _ClubNageHomeState extends State<ClubNageHome> with WidgetsBindingObserver
     var changed = false;
     for (var i = 0; i < sessions.length; i++) {
       final s = sessions[i];
-      final deadline = s.manualType == null && s.endTime != null
-          ? s.endTime!.add(const Duration(minutes: 15))
-          : s.openedAt.add(const Duration(hours: 4));
+      final deadline = s.openedAt.add(const Duration(hours: 10));
       if (s.isOpen && !now.isBefore(deadline)) {
         sessions[i] = s.close(now);
         changed = true;
@@ -436,9 +435,26 @@ class _ClubNageHomeState extends State<ClubNageHome> with WidgetsBindingObserver
     return const TrainingGroup('aucun', 'Aucun groupe', 'Aucun créneau', '—', '—');
   }
   List<Member> get expectedMembers {
-    final s=activeSession;
-    if(s!=null&&s.isOpen)return members.where((m)=>s.expectedMemberIds.contains(m.id)).toList();
-    return members.where((m)=>GroupEligibility.anyMatch(m.groups, [groupId])).toList();
+    final s = activeSession;
+    if (s != null && s.isOpen) {
+      // Les anciennes séances importées peuvent contenir une liste d'attendus
+      // incomplète. Ne pas masquer le reste du groupe lors de l'appel manuel.
+      // Les identifiants déjà pointés restent également visibles.
+      final ids = <String>{...s.expectedMemberIds};
+      for (final record in records) {
+        if (record.sessionId == s.id) ids.add(record.memberId);
+      }
+      // Repli uniquement lorsque la liste d'attendus est manifestement vide
+      // ou réduite à une seule personne (incident remonté sur V7.23).
+      if (ids.length <= 1) {
+        return members.where((m) => ids.contains(m.id) ||
+            GroupEligibility.anyMatch(m.groups, s.eligibleGroupIds.isNotEmpty
+                ? s.eligibleGroupIds : [s.groupId])).toList();
+      }
+      return members.where((m) => ids.contains(m.id)).toList();
+    }
+    return members.where((m) =>
+        GroupEligibility.anyMatch(m.groups, [groupId])).toList();
   }
   List<AttendanceRecord> get currentRecords {
     final session = activeSession;
@@ -511,7 +527,10 @@ class _ClubNageHomeState extends State<ClubNageHome> with WidgetsBindingObserver
     }
 
     if (!mounted) return;
-    setState(() => page = index);
+    setState(() {
+      if (page != index) _presenceSearch = '';
+      page = index;
+    });
   }
 
   Future<void> _startNfcPointage() async {
@@ -876,7 +895,7 @@ class _ClubNageHomeState extends State<ClubNageHome> with WidgetsBindingObserver
         ),
         actions: [
           IconButton(
-            tooltip: 'V7.16 · Import kDrive',
+            tooltip: 'Importer depuis kDrive',
             icon: const Icon(Icons.cloud_download_outlined),
             onPressed: () async {
               await Navigator.of(context).push(
@@ -1156,10 +1175,15 @@ class _ClubNageHomeState extends State<ClubNageHome> with WidgetsBindingObserver
           child: ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              const ListTile(
-                leading: Icon(Icons.info_outline),
-                title: Text('ClubNage-NFC'),
-                subtitle: Text('Version 7.22 · Montchanin Natation'),
+              FutureBuilder<PackageInfo>(
+                future: PackageInfo.fromPlatform(),
+                builder: (context, snapshot) => ListTile(
+                  leading: const Icon(Icons.info_outline),
+                  title: const Text('ClubNage-NFC'),
+                  subtitle: Text(snapshot.hasData
+                      ? 'Version ${snapshot.data!.version} (${snapshot.data!.buildNumber}) · Montchanin Natation'
+                      : 'Lecture de la version installée…'),
+                ),
               ),
               const Divider(),
               ListTile(
@@ -2662,6 +2686,10 @@ class _ClubNageHomeState extends State<ClubNageHome> with WidgetsBindingObserver
     padding: const EdgeInsets.all(16),
     children: [
       const Text('Synchronisation kDrive', style:TextStyle(fontSize:24,fontWeight:FontWeight.w900)),
+      FutureBuilder<PackageInfo>(future: PackageInfo.fromPlatform(),
+        builder: (context, snapshot) => Text(snapshot.hasData
+          ? 'ClubNage-NFC · version installée ${snapshot.data!.version} (${snapshot.data!.buildNumber})'
+          : 'Lecture de la version installée…'),),
       const SizedBox(height:8),
       const Text('Les pointages sont conservés localement jusqu’à leur envoi. Vérifiez le résultat après chaque synchronisation.'),
       const SizedBox(height:16),

@@ -1,0 +1,8 @@
+V7.24 Etape 2 - Correctif provisoire de liste Presences.
+Base: V7.24 Etape 1.
+En cas de seance avec zero ou un seul attendu, afficher aussi les licencies du groupe.
+Conserver les personnes deja pointees dans la liste.
+Reinitialiser le filtre de recherche lors du changement de page.
+Ne modifie ni les donnees kDrive ni les pointages sauvegardes.
+A tester sur une copie, puis CI GitHub Actions.
+Attention: pour une seance a plusieurs groupes, valider le repli et les attendus.
