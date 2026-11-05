@@ -3,7 +3,7 @@ name: Club MN NFC - Android APK
 on:
   workflow_dispatch:
   push:
-    branches: [ "main", "v6", "v7", "v7.13-corrections", "v7.14-corrections", "v7.15-synchronisation-badges", "v7.16-corrections", "v7.18-creneaux", "v7.19-synchronisation", "v7.20-production", "v7.21-signature", "v7.22-corrections", "v7.23-synchronisation-historique" ]
+    branches: [ "main", "v6", "v7", "v7.13-corrections", "v7.14-corrections", "v7.15-synchronisation-badges", "v7.16-corrections", "v7.18-creneaux", "v7.19-synchronisation", "v7.20-production", "v7.21-signature", "v7.22-corrections", "v7.23-synchronisation-historique", "v7.24-developpement" ]
 
 jobs:
   build-apk:
@@ -129,7 +129,7 @@ jobs:
         run: |
           set -euo pipefail
           BUILD_NUMBER=$((1000 + GITHUB_RUN_NUMBER))
-          flutter build apk --release --build-name=7.23.0 --build-number="$BUILD_NUMBER"
+          flutter build apk --release --build-name=7.24.0 --build-number="$BUILD_NUMBER"
 
       - name: Contrôler la signature et la version de l'APK
         shell: bash
