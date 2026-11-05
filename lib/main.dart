@@ -1883,7 +1883,15 @@ class _ClubNageHomeState extends State<ClubNageHome> with WidgetsBindingObserver
   String _presenceSearch = '';
 
   Widget _presencePage() {
-    final current = expectedMembers;
+    final current = expectedMembers.toList()
+      ..sort((a, b) {
+        final bySurname = _alphabeticalKey(a.lastName)
+            .compareTo(_alphabeticalKey(b.lastName));
+        if (bySurname != 0) return bySurname;
+        final byFirstName = _alphabeticalKey(a.firstName)
+            .compareTo(_alphabeticalKey(b.firstName));
+        return byFirstName != 0 ? byFirstName : a.id.compareTo(b.id);
+      });
     return ListView(padding: const EdgeInsets.all(16), children: [
       _groupSelector(),
       const SizedBox(height: 12),

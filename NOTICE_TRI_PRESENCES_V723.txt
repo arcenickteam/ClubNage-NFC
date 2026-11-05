@@ -1,0 +1,1 @@
+V7.23 : tri de la liste de pointage manuel dans Présences par NOM puis prénom, mêmes règles que Licenciés. Seul lib/main.dart change. Basé sur le correctif V7.23 Révisions.
