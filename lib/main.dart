@@ -2903,7 +2903,7 @@ class _ClubNageHomeState extends State<ClubNageHome> with WidgetsBindingObserver
                   (record.revision == current.revision &&
                    (record.timestamp.isAfter(current.timestamp) ||
                     (record.timestamp.isAtSameMomentAs(current.timestamp) &&
-                     rank(record.status) > rank(current.status)))))) {
+                     rank(record.status) > rank(current.status))))))) {
               effective[key] = record;
             }
           }
