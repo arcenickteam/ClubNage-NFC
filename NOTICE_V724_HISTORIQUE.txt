@@ -1,0 +1,27 @@
+ClubNage-NFC V7.24 — CANDIDAT DE DÉVELOPPEMENT (NON VALIDÉ)
+
+Fichiers concernés : main.dart, models.dart, 4 services, tests, workflow CI.
+Nouveautés :
+- Identité de pointage conservée après correction, révisions.
+- Journal append-only local et dans l'onglet « Historique corrections ».
+- Téléphone : identifiant persistant et nom modifiable dans Synchronisation.
+- Onglet « Appareils » : ID, nom, version, build, dernières activités.
+- Synchronisation des événements par identifiant unique (idempotence).
+- Détection des conflits et choix explicite : garder kDrive ou téléphone.
+- Prévention de nouvelles lignes en doublon séance/licencié.
+- Statistiques de l'application sur l'état courant et la liste attendue.
+
+IMPORTANT :
+- AUCUN TEST FLUTTER N'A PU ÊTRE EXÉCUTÉ DANS CET ENVIRONNEMENT.
+- Le classeur de test fourni contient déjà 2 doublons métier historiques :
+  aucune suppression automatique, avertissement pendant la synchronisation.
+- Le tableau de bord Excel actuel utilise certaines formules COUNTIF sur les
+  lignes brutes. Son recalcul fiable en présence de doublons RESTE À VALIDER
+  et à corriger dans une copie du classeur, pas directement en production.
+- Les corrections effectuées AVANT l'installation ne peuvent pas être
+  reconstituées rétroactivement dans le journal.
+- Faire une sauvegarde kDrive avant le premier test. Tester avec une COPIE
+  du classeur et deux téléphones de test, jamais directement en production.
+- Le code 1998 est un code partagé, pas une authentification individuelle.
+
+Le ZIP n'inclut pas de classeur Excel et ne remplace pas le fichier kDrive.

@@ -5,6 +5,7 @@ import '../models.dart';
 import 'infomaniak_kdrive_service.dart';
 import 'xlsx_pointage_writer.dart';
 import 'xlsx_data_reader.dart';
+import 'correction_journal.dart';
 
 /// Résultat d'une synchronisation bidirectionnelle. Aucune donnée locale
 /// n'est supprimée tant que le classeur n'a pas été confirmé par relecture.
@@ -16,6 +17,10 @@ class AttendanceSyncResult {
   final int importedPointages;
   final int importedSessions;
   final List<String> conflicts;
+  final List<AttendanceCorrection> corrections;
+  final int uploadedCorrections;
+  final Set<String> conflictingPointageIds;
+  final Map<String, AttendanceRecord> remoteConflicts;
 
   const AttendanceSyncResult({
     required this.sessions,
@@ -25,6 +30,10 @@ class AttendanceSyncResult {
     required this.importedPointages,
     required this.importedSessions,
     required this.conflicts,
+    this.corrections = const [],
+    this.uploadedCorrections = 0,
+    this.conflictingPointageIds = const {},
+    this.remoteConflicts = const {},
   });
 }
 
@@ -33,6 +42,41 @@ class KdriveAttendanceSync {
   KdriveAttendanceSync(this.api);
 
   static const sessionSheet = 'Sessions NFC';
+  static const correctionSheet = 'Historique corrections';
+  static const deviceSheet = 'Appareils';
+  static const correctionHeaders = <String>[
+    'ID_Correction','ID_Pointage','ID_Seance','Licencie_ID',
+    'Ancien_statut','Nouveau_statut','Revision_avant','Revision_apres',
+    'Date_correction_UTC','Appareil_ID','Nom_appareil','Version_application',
+    'Apres_cloture','Statut_sync','Conflit',
+  ];
+  static const deviceHeaders = <String>[
+    'Appareil_ID','Nom_appareil','Version_application','Numero_build',
+    'Premiere_utilisation_UTC','Derniere_synchronisation_UTC',
+    'Derniere_activite_UTC','Etat_synchronisation',
+  ];
+
+  static List<String> _correctionRow(AttendanceCorrection e, {bool conflict = false}) => [
+    e.id, e.pointageId, e.sessionId, e.memberId, e.previousStatus,
+    e.newStatus, '${e.previousRevision}', '${e.newRevision}',
+    e.at.toUtc().toIso8601String(), e.deviceId, e.deviceName,
+    e.appVersion, e.afterClosure ? '1' : '0',
+    conflict ? 'Conflit' : 'Enregistré', conflict ? '1' : '0',
+  ];
+
+  static AttendanceCorrection _decodeCorrection(List<String> r) {
+    if (r.length != correctionHeaders.length) {
+      throw const FormatException('Historique de correction incomplet.');
+    }
+    return AttendanceCorrection(
+      id: r[0], pointageId: r[1], sessionId: r[2], memberId: r[3],
+      previousStatus: r[4], newStatus: r[5],
+      previousRevision: int.parse(r[6]), newRevision: int.parse(r[7]),
+      at: DateTime.parse(r[8]), deviceId: r[9], deviceName: r[10],
+      appVersion: r[11], afterClosure: r[12] == '1',
+    );
+  }
+
   static const sessionHeaders = <String>[
     'ID_Seance', 'Groupe', 'Date', 'Ouverture', 'Fermeture',
     'Licencies_attendus_JSON', 'Libelle', 'Debut', 'Fin',
@@ -81,7 +125,8 @@ class KdriveAttendanceSync {
       recordId(record), stamp.substring(0, 10), stamp.substring(11, 19),
       record.memberId, member?.lastName ?? '', member?.firstName ?? '',
       session?.label ?? record.groupId, record.groupId,
-      record.sessionId ?? '', record.method, 'ClubNage Android', syncDate,
+      record.sessionId ?? '', record.method,
+      record.deviceId.isEmpty ? 'Inconnu (ancienne version)' : record.deviceId, syncDate,
       _statusLabel(record.status), record.revision.toString(),
       (record.updatedAt ?? record.timestamp).toUtc().toIso8601String(),
     ];
@@ -105,6 +150,7 @@ class KdriveAttendanceSync {
       method: row[9],
       revision: row.length > 13 ? (int.tryParse(row[13]) ?? 0) : 0,
       updatedAt: row.length > 14 ? DateTime.tryParse(row[14]) : null,
+      deviceId: row.length > 10 ? row[10] : '',
     );
   }
 
@@ -157,6 +203,8 @@ class KdriveAttendanceSync {
     required List<AttendanceRecord> records,
     required List<TrainingSession> sessions,
     required List<Member> members,
+    List<AttendanceCorrection> corrections = const [],
+    ClubDevice? device,
   }) async {
     if (!await api.restoreSavedApiToken()) {
       throw StateError('Configurer le jeton API kDrive dans l’écran d’import.');
@@ -165,6 +213,8 @@ class KdriveAttendanceSync {
     final before = await api.downloadWorkbook(InfomaniakKdriveService.scheduleName);
     final oldPointages = _sheetOrEmpty(before, XlsxPointageWriter.sheetName);
     final oldSessions = _sheetOrEmpty(before, sessionSheet);
+    final oldCorrections = _sheetOrEmpty(before, correctionSheet);
+    final oldDevices = _sheetOrEmpty(before, deviceSheet);
     final legacyPointages = oldPointages.isNotEmpty &&
         oldPointages.first.length == 13 &&
         _sameSession(oldPointages.first, XlsxPointageWriter.headers.sublist(0, 13));
@@ -175,6 +225,13 @@ class KdriveAttendanceSync {
     if (oldSessions.isNotEmpty &&
         !_sameSession(oldSessions.first, sessionHeaders)) {
       throw StateError('En-têtes Sessions NFC incompatibles : aucune écriture.');
+    }
+
+    if (oldCorrections.isNotEmpty && !_sameSession(oldCorrections.first, correctionHeaders)) {
+      throw StateError('En-têtes Historique corrections incompatibles : aucune écriture.');
+    }
+    if (oldDevices.isNotEmpty && !_sameSession(oldDevices.first, deviceHeaders)) {
+      throw StateError('En-têtes Appareils incompatibles : aucune écriture.');
     }
 
     Map<String, List<String>> byId(List<List<String>> rows) {
@@ -190,8 +247,25 @@ class KdriveAttendanceSync {
     }
 
     final remotePointages = byId(oldPointages);
+    String logicalKey(List<String> row) => '${row[8]}|${row[3]}';
+    final remoteByLogicalKey = <String, List<String>>{};
+    final remoteDuplicateKeys = <String>{};
+    for (final row in remotePointages.values) {
+      if (row.length < 13 || row[12] == 'Refus exceptionnel') continue;
+      final key = logicalKey(row);
+      if (remoteByLogicalKey.containsKey(key)) {
+        remoteDuplicateKeys.add(key);
+      } else {
+        remoteByLogicalKey[key] = row;
+      }
+    }
     final remoteSessions = byId(oldSessions);
-    final conflicts = <String>[];
+    final remoteCorrections = byId(oldCorrections);
+    final conflicts = <String>[
+      for (final key in remoteDuplicateKeys)
+        'Doublon historique sur kDrive (séance/licencié) : $key. '
+        'À examiner dans Excel, aucune suppression automatique.',
+    ];
     final localSessions = {for (final s in sessions) s.id: s};
     final mergedSessions = <String, TrainingSession>{};
     for (final entry in remoteSessions.entries) {
@@ -242,24 +316,106 @@ class KdriveAttendanceSync {
     // Ne jamais utiliser Date_synchronisation comme horodatage metier.
     final localPointages = {for (final r in records.where(_canUpload)) recordId(r): r};
     final newPointages = <List<String>>[];
+    final conflictingPointageIds = <String>{};
+    final remoteConflictingRows = <String, List<String>>{};
+    final localLogicalIds = <String, String>{};
+    for (final record in records.where((r) => _canUpload(r) &&
+        r.status != AttendanceStatus.refused)) {
+      final key = '${record.sessionId ?? ''}|${record.memberId}';
+      final previous = localLogicalIds[key];
+      if (previous != null && previous != recordId(record)) {
+        throw StateError('Deux pointages locaux pour $key : synchronisation refusée.');
+      }
+      localLogicalIds[key] = recordId(record);
+    }
     final syncDate = DateTime.now().toIso8601String();
     for (final entry in localPointages.entries) {
       final row = _recordRow(entry.value, people, mergedSessions, syncDate);
       final previous = remotePointages[entry.key];
-      if (previous == null) {
-        newPointages.add(row);
+      if (remoteDuplicateKeys.contains(logicalKey(row)) &&
+          entry.value.status != AttendanceStatus.refused) {
+        conflicts.add('Pointages métier déjà dupliqués sur kDrive : ${logicalKey(row)}. '
+            'Aucune nouvelle écriture pour ce licencié/séance.');
+        conflictingPointageIds.add(entry.key);
+      } else if (previous == null) {
+        final other = remoteByLogicalKey[logicalKey(row)];
+        if (other != null && other[0] != entry.key &&
+            entry.value.status != AttendanceStatus.refused) {
+          conflicts.add('Séance/licencié ${logicalKey(row)} : identifiants distincts entre téléphones.');
+          conflictingPointageIds.add(entry.key);
+          remoteConflictingRows[entry.key] = other;
+        } else {
+          newPointages.add(row);
+        }
       } else {
         final remoteRevision = previous.length > 13 ? (int.tryParse(previous[13]) ?? 0) : 0;
         if (entry.value.revision > remoteRevision) {
-          newPointages.add(row);
+          // Ne pas écraser une modification distante que ce téléphone n'a
+          // jamais observée. La chaîne des événements doit être continue.
+          final chain = corrections.where((e) => e.pointageId == entry.key &&
+              e.newRevision > remoteRevision).toList()
+            ..sort((a, b) => a.newRevision.compareTo(b.newRevision));
+          var revision = remoteRevision;
+          var status = _parseStatus(previous[12]).name;
+          for (final event in chain) {
+            if (event.previousRevision != revision || event.previousStatus != status) break;
+            revision = event.newRevision;
+            status = event.newStatus;
+          }
+          if (revision == entry.value.revision && status == entry.value.status.name) {
+            newPointages.add(row);
+          } else {
+            conflicts.add('Pointage ${entry.key} : historique divergent, aucune ecriture.');
+            conflictingPointageIds.add(entry.key);
+            remoteConflictingRows[entry.key] = previous;
+          }
         } else if (entry.value.revision == remoteRevision &&
             previous[12] != row[12]) {
           conflicts.add('Pointage ${entry.key} : revisions concurrentes, aucune ecriture.');
+          conflictingPointageIds.add(entry.key);
+          remoteConflictingRows[entry.key] = previous;
+        } else if (entry.value.revision < remoteRevision &&
+            corrections.any((e) => e.pointageId == entry.key &&
+              !remoteCorrections.containsKey(e.id))) {
+          conflicts.add('Pointage ${entry.key} : correction locale non confirmee, aucune suppression.');
+          conflictingPointageIds.add(entry.key);
+          remoteConflictingRows[entry.key] = previous;
         }
       }
     }
 
-    if (newPointages.isNotEmpty || newSessions.isNotEmpty) {
+    final localCorrectionMap = <String, AttendanceCorrection>{};
+    for (final e in corrections) {
+      final existing = localCorrectionMap[e.id];
+      if (existing != null && existing.toJson().toString() != e.toJson().toString()) {
+        throw StateError('ID de correction réutilisé avec un contenu différent : ${e.id}');
+      }
+      localCorrectionMap[e.id] = e;
+    }
+    final newCorrections = <List<String>>[];
+    for (final e in localCorrectionMap.values) {
+      final existing = remoteCorrections[e.id];
+      if (existing != null) {
+        // Le statut de conflit peut être enrichi mais l'événement reste immuable.
+        if (existing.take(13).join('|') != _correctionRow(e).take(13).join('|')) {
+          throw StateError('Correction distante contradictoire : ${e.id}');
+        }
+        continue;
+      }
+      newCorrections.add(_correctionRow(e,
+        conflict: conflictingPointageIds.contains(e.pointageId)));
+    }
+    final deviceRows = <List<String>>[];
+    if (device != null) {
+      final now = DateTime.now().toUtc().toIso8601String();
+      deviceRows.add([
+        device.id, device.name, device.version, device.build,
+        device.firstUsed.toUtc().toIso8601String(), now, now,
+        conflicts.isEmpty ? 'Synchronisé' : 'Conflits à vérifier',
+      ]);
+    }
+    if (newPointages.isNotEmpty || newSessions.isNotEmpty ||
+        newCorrections.isNotEmpty || deviceRows.isNotEmpty) {
       if (await api.scheduleEtag() != etag) {
         throw StateError('Classeur modifié par un autre téléphone : relancer.');
       }
@@ -271,6 +427,14 @@ class KdriveAttendanceSync {
         updated = XlsxPointageWriter.merge(updated, newSessions,
             targetSheetName: sessionSheet, targetHeaders: sessionHeaders);
       }
+      if (newCorrections.isNotEmpty) {
+        updated = XlsxPointageWriter.merge(updated, newCorrections,
+            targetSheetName: correctionSheet, targetHeaders: correctionHeaders);
+      }
+      if (deviceRows.isNotEmpty) {
+        updated = XlsxPointageWriter.merge(updated, deviceRows,
+            targetSheetName: deviceSheet, targetHeaders: deviceHeaders);
+      }
       await api.replaceScheduleIfUnchanged(updated, etag);
     }
 
@@ -278,10 +442,13 @@ class KdriveAttendanceSync {
     final after = await api.downloadWorkbook(InfomaniakKdriveService.scheduleName);
     final confirmedPointages = byId(_sheetOrEmpty(after, XlsxPointageWriter.sheetName));
     final confirmedSessions = byId(_sheetOrEmpty(after, sessionSheet));
+    final confirmedCorrections = byId(_sheetOrEmpty(after, correctionSheet));
     if (!newPointages.every((r) => confirmedPointages[r.first] != null &&
         samePointage(confirmedPointages[r.first]!, r)) ||
         !newSessions.every((r) => confirmedSessions[r.first] != null &&
-        _sameSession(confirmedSessions[r.first]!, r))) {
+        _sameSession(confirmedSessions[r.first]!, r)) ||
+        !newCorrections.every((r) => confirmedCorrections[r.first] != null &&
+        _sameSession(confirmedCorrections[r.first]!, r))) {
       throw StateError('Synchronisation non confirmée : données locales conservées.');
     }
 
@@ -298,16 +465,27 @@ class KdriveAttendanceSync {
     for (final entry in confirmedPointages.entries) {
       final remote = _decodeRecord(entry.value);
       final local = allRecords[entry.key];
-      if (local == null || remote.revision > local.revision) {
+      if (!conflictingPointageIds.contains(entry.key) &&
+          (local == null || remote.revision > local.revision)) {
         allRecords[entry.key] = remote;
         importedPointages++;
       }
+    }
+    final mergedCorrections = <String, AttendanceCorrection>{...localCorrectionMap};
+    for (final entry in confirmedCorrections.entries) {
+      mergedCorrections[entry.key] = _decodeCorrection(entry.value);
     }
     return AttendanceSyncResult(
       sessions: allSessions.values.toList(), records: allRecords.values.toList(),
       uploadedPointages: newPointages.length, uploadedSessions: newSessions.length,
       importedPointages: importedPointages, importedSessions: importedSessions,
-      conflicts: conflicts,
+      conflicts: conflicts, corrections: mergedCorrections.values.toList(),
+      uploadedCorrections: newCorrections.length,
+      conflictingPointageIds: conflictingPointageIds,
+      remoteConflicts: {
+        for (final entry in remoteConflictingRows.entries)
+          entry.key: _decodeRecord(entry.value),
+      },
     );
   }
 }

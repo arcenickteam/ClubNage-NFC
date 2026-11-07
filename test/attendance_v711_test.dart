@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:clubnage_nfc/models.dart';
 import 'package:clubnage_nfc/services/manual_attendance.dart';
+import 'package:clubnage_nfc/services/correction_journal.dart';
 import 'package:clubnage_nfc/services/local_attendance_store.dart';
 import 'package:clubnage_nfc/services/kdrive_attendance_sync.dart';
 import 'package:clubnage_nfc/services/infomaniak_kdrive_service.dart';
@@ -44,11 +45,19 @@ void main() {
   AttendanceRecord record(String id, AttendanceStatus status) => AttendanceRecord(
       memberId: id, groupId: 'g1', sessionId: 's1', timestamp: now,
       status: status, method: 'MANUEL');
-  Future<int> sync(MemoryDrive drive, List<AttendanceRecord> records) async =>
+  final device = ClubDevice(id: 'test-phone', name: 'Test',
+    version: '7.24.0', build: '1024', firstUsed: now);
+  AttendanceCorrection event(AttendanceRecord before, AttendanceRecord after) =>
+    AttendanceCorrection.create(pointageId: KdriveAttendanceSync.recordId(after),
+      sessionId: session.id, memberId: before.memberId,
+      previousStatus: before.status.name, newStatus: after.status.name,
+      previousRevision: before.revision, newRevision: after.revision,
+      device: device, afterClosure: false, now: after.updatedAt!);
+  Future<int> sync(MemoryDrive drive, List<AttendanceRecord> records,
+      {List<AttendanceCorrection> corrections = const []}) async =>
       (await KdriveAttendanceSync(drive).synchronize(
         records: records,
-        sessions: [session],
-        members: [],
+        sessions: [session], members: [], corrections: corrections,
       )).uploadedPointages;
   List<List<String>> rows(MemoryDrive drive) => XlsxDataReader.readSheet(drive.bytes, 'Pointages NFC');
 
@@ -60,12 +69,14 @@ void main() {
     expect(await sync(drive, data), 0);
     expect(rows(drive).length, 4);
     expect(drive.uploads, 1);
+    final before = data[0];
     data[0] = ManualAttendance.update(records: data, session: session, memberId: 'm1',
         status: AttendanceStatus.absent, now: now.add(const Duration(minutes: 5)));
-    expect(await sync(drive, data), 1);
+    final correction = event(before, data[0]);
+    expect(await sync(drive, data, corrections: [correction]), 1);
     expect(rows(drive).length, 4);
     expect(rows(drive)[1][12], 'Absent');
-    expect(await sync(drive, data), 0);
+    expect(await sync(drive, data, corrections: [correction]), 0);
     expect(ZipDecoder().decodeBytes(drive.bytes).findFile('xl/worksheets/sheet1.xml')!.content, original);
   });
 
@@ -79,7 +90,8 @@ void main() {
         status: AttendanceStatus.absent,
         now: now.add(const Duration(minutes: 5)));
     await KdriveAttendanceSync(drive).synchronize(
-        records: [corrected], sessions: [session], members: []);
+        records: [corrected], sessions: [session], members: [],
+        corrections: [event(first, corrected)]);
     final result = await KdriveAttendanceSync(drive).synchronize(
         records: [first], sessions: [session], members: []);
     expect(result.records.single.status, AttendanceStatus.absent);
@@ -97,9 +109,10 @@ void main() {
     final b = ManualAttendance.update(records: [first], session: session,
         memberId: 'm1', status: AttendanceStatus.late,
         now: now.add(const Duration(minutes: 6)));
-    await sync(drive, [a]);
+    await sync(drive, [a], corrections: [event(first, a)]);
     final result = await KdriveAttendanceSync(drive).synchronize(
-        records: [b], sessions: [session], members: []);
+        records: [b], sessions: [session], members: [],
+        corrections: [event(first, b)]);
     expect(result.conflicts, isNotEmpty);
     expect(rows(drive)[1][12], 'Absent');
   });

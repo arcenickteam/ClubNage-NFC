@@ -142,6 +142,7 @@ class AttendanceRecord {
   final String method;
   final int revision;
   final DateTime? updatedAt;
+  final String deviceId;
   const AttendanceRecord({
     required this.memberId,
     required this.groupId,
@@ -151,5 +152,6 @@ class AttendanceRecord {
     required this.method,
     this.revision = 0,
     this.updatedAt,
+    this.deviceId = '',
   });
 }

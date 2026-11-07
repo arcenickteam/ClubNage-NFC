@@ -15,6 +15,7 @@ import 'services/slot_authorization.dart';
 import 'services/infomaniak_kdrive_service.dart';
 import 'services/kdrive_attendance_sync.dart';
 import 'services/kdrive_badge_sync.dart';
+import 'services/correction_journal.dart';
 
 const navy = Color(0xFF071A2B);
 const panel = Color(0xFF0D263B);
@@ -69,6 +70,8 @@ class _ClubNageHomeState extends State<ClubNageHome> with WidgetsBindingObserver
   final Map<String, String> assignedUids = {};
   final Map<String, String> assignedQrTokens = {};
   final List<AttendanceRecord> records = [];
+  final List<AttendanceCorrection> _corrections = [];
+  ClubDevice? _deviceIdentity;
   final LocalAttendanceStore _attendanceStore = LocalAttendanceStore();
   bool _attendanceLoaded = false;
   bool _syncingKdrive = false;
@@ -315,11 +318,14 @@ class _ClubNageHomeState extends State<ClubNageHome> with WidgetsBindingObserver
 
   Future<void> _restoreAttendance() async {
     try {
+      final device = await ClubDevice.load();
       final snapshot = await _attendanceStore.load();
       if (!mounted) return;
       setState(() {
         sessions.addAll(snapshot.sessions);
         records.addAll(snapshot.records);
+        _corrections.addAll(snapshot.corrections);
+        _deviceIdentity = device;
         activeSession = snapshot.activeSessionId == null ? null :
             sessions.where((s) => s.id == snapshot.activeSessionId && s.isOpen).firstOrNull;
         sessionOpen = activeSession != null;
@@ -345,6 +351,7 @@ class _ClubNageHomeState extends State<ClubNageHome> with WidgetsBindingObserver
     final snapshot = AttendanceSnapshot(
       sessions: List<TrainingSession>.of(sessions),
       records: List<AttendanceRecord>.of(records),
+      corrections: List<AttendanceCorrection>.of(_corrections),
       activeSessionId: activeSession?.id,
     );
     _pendingAttendanceSave = _pendingAttendanceSave.then((_) async {
@@ -489,6 +496,7 @@ class _ClubNageHomeState extends State<ClubNageHome> with WidgetsBindingObserver
       await _attendanceStore.save(AttendanceSnapshot(
         sessions: updatedSessions,
         records: List<AttendanceRecord>.of(records),
+        corrections: List<AttendanceCorrection>.of(_corrections),
         activeSessionId: updatedSessions.where((s) => s.isOpen && s.id != session.id).firstOrNull?.id,
       ));
       if (!mounted) return;
@@ -651,6 +659,7 @@ class _ClubNageHomeState extends State<ClubNageHome> with WidgetsBindingObserver
           sessionId: sessionId, timestamp: DateTime.now(),
           status: AttendanceStatus.refused,
           method: '$method (refus exceptionnel)',
+          deviceId: _deviceIdentity?.id ?? '',
         ));
         result = AttendanceResult(status: AttendanceStatus.denied,
           title: 'Présence exceptionnelle refusée',
@@ -678,15 +687,26 @@ class _ClubNageHomeState extends State<ClubNageHome> with WidgetsBindingObserver
     final now = DateTime.now();
     final start=activeSession!.startTime??now;
     final status=now.isAfter(start.add(const Duration(minutes:15)))?AttendanceStatus.late:AttendanceStatus.present;
-    final previous = currentRecords.where((r) => r.memberId == member.id).toList();
+    final previous = currentRecords.where((r) => r.memberId == member.id &&
+        r.status != AttendanceStatus.refused).toList();
+    if (previous.length > 1) {
+      setState(() => result = AttendanceResult(status: AttendanceStatus.denied,
+        title: 'Pointages en double', message: 'Correction manuelle nécessaire.',
+        member: member, uid: identifier));
+      return;
+    }
+    final next = AttendanceRecord(
+      memberId: member.id, groupId: groupId, sessionId: activeSession!.id,
+      timestamp: previous.isEmpty ? now : previous.first.timestamp,
+      status: status, method: exceptional ? '$method (exception)' : method,
+      revision: previous.isEmpty ? 0 : previous.first.revision + 1,
+      updatedAt: now, deviceId: _deviceIdentity?.id ?? '',
+    );
+    _journalCorrection(previous.firstOrNull, next, afterClosure: false);
     setState(() {
       records.removeWhere((r) => r.sessionId == activeSession!.id &&
           r.memberId == member.id && r.status != AttendanceStatus.refused);
-      records.add(AttendanceRecord(
-        memberId: member.id, groupId: groupId, sessionId: activeSession!.id,
-        timestamp: previous.isEmpty ? now : previous.first.timestamp,
-        status: status, method: exceptional ? '$method (exception)' : method,
-      ));
+      records.add(next);
       result = AttendanceResult(status: status, title: exceptional ? 'Présence exceptionnelle enregistrée' : (status == AttendanceStatus.late ? 'Retard enregistré' : 'Présent'), message: member.fullName, member: member, uid: identifier);
     });
     _saveAttendance();
@@ -1886,13 +1906,59 @@ class _ClubNageHomeState extends State<ClubNageHome> with WidgetsBindingObserver
     _ => 'Non pointé',
   };
 
+  void _journalCorrection(AttendanceRecord? previous, AttendanceRecord updated,
+      {required bool afterClosure}) {
+    if (previous == null || previous.status == updated.status) return;
+    final device = _deviceIdentity;
+    if (device == null) throw StateError('Identifiant du téléphone non chargé.');
+    _corrections.add(AttendanceCorrection.create(
+      pointageId: KdriveAttendanceSync.recordId(updated),
+      sessionId: updated.sessionId ?? '', memberId: updated.memberId,
+      previousStatus: previous.status.name, newStatus: updated.status.name,
+      previousRevision: previous.revision, newRevision: updated.revision,
+      device: device, afterClosure: afterClosure, now: DateTime.now(),
+    ));
+  }
+
+  Future<void> _renameDevice() async {
+    final device = _deviceIdentity;
+    if (device == null) return;
+    final controller = TextEditingController(text: device.name);
+    final chosen = await showDialog<String>(context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Nom de ce téléphone'),
+        content: TextField(controller: controller, maxLength: 60,
+          decoration: const InputDecoration(hintText: 'Ex. Accueil piscine')),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('ANNULER')),
+          FilledButton(onPressed: () => Navigator.pop(dialogContext, controller.text),
+            child: const Text('ENREGISTRER')),
+        ],
+      ));
+    controller.dispose();
+    if (!mounted || chosen == null) return;
+    try {
+      final renamed = await device.renamed(chosen);
+      if (mounted) setState(() => _deviceIdentity = renamed);
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Nom de téléphone : $e')));
+    }
+  }
+
   void _setManualAttendance(Member member, AttendanceStatus status) {
     if (_closingSession || !_attendanceLoaded || _attendanceError != null) return;
     final session = activeSession;
     if (session == null || !session.isOpen) return;
     try {
+      final previous = records.where((r) => r.sessionId == session.id &&
+          r.memberId == member.id && r.status != AttendanceStatus.refused).firstOrNull;
+      if (previous?.status == status) return;
       final record = ManualAttendance.update(records: records, session: session,
-          memberId: member.id, status: status, now: DateTime.now());
+          memberId: member.id, status: status, now: DateTime.now(),
+          deviceId: _deviceIdentity?.id ?? '');
+      _journalCorrection(previous, record, afterClosure: false);
       setState(() {
         records.removeWhere((r) => r.sessionId == session.id &&
             r.memberId == member.id && r.status != AttendanceStatus.refused);
@@ -1963,7 +2029,9 @@ class _ClubNageHomeState extends State<ClubNageHome> with WidgetsBindingObserver
       final corrected = ManualAttendance.update(
         records: latest, session: session, memberId: original.memberId,
         status: selected, now: DateTime.now(),
-        method: 'MANUEL', authorizedClosedCorrection: true);
+        method: 'MANUEL', authorizedClosedCorrection: true,
+        deviceId: _deviceIdentity?.id ?? '');
+      _journalCorrection(latest.first, corrected, afterClosure: true);
       setState(() {
         records.removeWhere((r) => r.sessionId == session.id &&
             r.memberId == original.memberId &&
@@ -2115,6 +2183,7 @@ class _ClubNageHomeState extends State<ClubNageHome> with WidgetsBindingObserver
               r.status == AttendanceStatus.present ||
               r.status == AttendanceStatus.late)
           .map((r) => r.memberId)
+          .where(session.expectedMemberIds.contains)
           .toSet();
 
   int get _statsExpectedCount =>
@@ -2143,6 +2212,7 @@ class _ClubNageHomeState extends State<ClubNageHome> with WidgetsBindingObserver
             _recordsForSession(session)
                 .where((r) => r.status == AttendanceStatus.late)
                 .map((r) => r.memberId)
+                .where(session.expectedMemberIds.contains)
                 .toSet()
                 .length,
       );
@@ -2647,6 +2717,87 @@ class _ClubNageHomeState extends State<ClubNageHome> with WidgetsBindingObserver
   Widget _metric(String title, String value, IconData icon, Color color) => Card(child: Padding(padding: const EdgeInsets.all(14), child: Row(children: [Icon(icon, color: color, size: 28), const SizedBox(width: 8), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(title, style: const TextStyle(color: Colors.white60)), Text(value, style: const TextStyle(fontSize: 21, fontWeight: FontWeight.w800))]))])));
 
 
+  // Résolution explicite, jamais automatique : le responsable choisit l'état
+  // de référence, sans effacer le journal des modifications concurrentes.
+  Future<void> _resolveAttendanceConflict(
+      AttendanceRecord remote, AttendanceRecord local) async {
+    if (!mounted) return;
+    final choice = await showDialog<String>(context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Conflit de présence'),
+        content: Text('${_memberById(local.memberId).fullName}\n'
+          'Téléphone : ${_attendanceLabel(local.status)} (rév. ${local.revision})\n'
+          'kDrive : ${_attendanceLabel(remote.status)} (rév. ${remote.revision})\n\n'
+          'Choisissez la version à conserver. Les événements restent dans l’historique.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('PLUS TARD')),
+          TextButton(onPressed: () => Navigator.pop(dialogContext, 'remote'),
+            child: const Text('GARDER KDRIVE')),
+          FilledButton(onPressed: () => Navigator.pop(dialogContext, 'local'),
+            child: const Text('GARDER TÉLÉPHONE')),
+        ],
+      ));
+    if (!mounted || choice == null) return;
+    final key = KdriveAttendanceSync.recordId(local);
+    final current = records.where((r) => KdriveAttendanceSync.recordId(r) == key).firstOrNull;
+    if (current == null || current.revision != local.revision ||
+        current.status != local.status) return;
+    if (choice == 'remote') {
+      setState(() {
+        records.removeWhere((r) => KdriveAttendanceSync.recordId(r) == key);
+        records.add(remote);
+      });
+      _saveAttendance();
+      return;
+    }
+    final session = sessions.where((s) => s.id == local.sessionId).firstOrNull;
+    if (session == null) return;
+    if (!session.isOpen) {
+      final controller = TextEditingController();
+      final authorized = await showDialog<bool>(context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Autorisation de résolution'),
+          content: TextField(controller: controller, obscureText: true,
+            keyboardType: TextInputType.number,
+            decoration: const InputDecoration(labelText: 'Code 1998')),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('ANNULER')),
+            FilledButton(onPressed: () => Navigator.pop(dialogContext,
+              controller.text.trim() == '1998'), child: const Text('VALIDER')),
+          ],
+        ));
+      controller.dispose();
+      if (!mounted || authorized != true) return;
+    }
+    if (remote.status == local.status) {
+      setState(() {
+        records.removeWhere((r) => KdriveAttendanceSync.recordId(r) == key);
+        records.add(remote);
+      });
+      _saveAttendance();
+      return;
+    }
+    final device = _deviceIdentity;
+    if (device == null) return;
+    final now = DateTime.now();
+    final resolved = AttendanceRecord(
+      memberId: local.memberId, groupId: local.groupId,
+      sessionId: local.sessionId, timestamp: remote.timestamp,
+      status: local.status, method: local.method,
+      revision: remote.revision + 1, updatedAt: now, deviceId: device.id,
+    );
+    _journalCorrection(remote, resolved, afterClosure: !session.isOpen);
+    setState(() {
+      records.removeWhere((r) => KdriveAttendanceSync.recordId(r) == key);
+      records.add(resolved);
+    });
+    _saveAttendance();
+    if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+      content: Text('Résolution locale enregistrée. Synchronisez à nouveau kDrive.')));
+  }
+
   Future<void> _syncAttendanceToKdrive() async {
     if (_syncingKdrive || !_attendanceLoaded || _attendanceError != null) return;
     setState(() { _syncingKdrive = true; _kdriveSyncMessage = 'Synchronisation en cours…'; });
@@ -2695,7 +2846,8 @@ class _ClubNageHomeState extends State<ClubNageHome> with WidgetsBindingObserver
       try {
         final synced = await KdriveAttendanceSync(InfomaniakKdriveService())
             .synchronize(records: List.of(records),
-                sessions: List.of(sessions), members: List.of(members));
+                sessions: List.of(sessions), members: List.of(members),
+                corrections: List.of(_corrections), device: _deviceIdentity);
         if (mounted) {
           // Fusionner avec l'état ACTUEL du téléphone : un scan NFC peut avoir
           // eu lieu pendant les requêtes réseau. Ne jamais remplacer à l'aveugle.
@@ -2708,13 +2860,19 @@ class _ClubNageHomeState extends State<ClubNageHome> with WidgetsBindingObserver
               allSessions[local.id] = local;
             }
           }
+          final knownCorrectionIds = _corrections.map((e) => e.id).toSet();
+          _corrections.addAll(synced.corrections.where((e) =>
+              !knownCorrectionIds.contains(e.id)));
           final allRecords = <String, AttendanceRecord>{
             for (final record in synced.records)
               KdriveAttendanceSync.recordId(record): record,
             for (final record in records)
-              if (!synced.records.any((remote) =>
+              if (synced.conflictingPointageIds.contains(
+                    KdriveAttendanceSync.recordId(record)) ||
+                  !synced.records.any((remote) =>
                   KdriveAttendanceSync.recordId(remote) == KdriveAttendanceSync.recordId(record) &&
-                  remote.revision >= record.revision))
+                  (remote.revision > record.revision ||
+                   (remote.revision == record.revision && remote.status == record.status))))
                 KdriveAttendanceSync.recordId(record): record,
           };
           // Plusieurs appareils peuvent pointer le même licencié : un seul
@@ -2734,11 +2892,18 @@ class _ClubNageHomeState extends State<ClubNageHome> with WidgetsBindingObserver
             }
             final key = '${record.sessionId ?? ''}|${record.memberId}';
             final current = effective[key];
-            if (current == null || record.revision > current.revision ||
-                (record.revision == current.revision &&
-                 (record.timestamp.isAfter(current.timestamp) ||
-                  (record.timestamp.isAtSameMomentAs(current.timestamp) &&
-                   rank(record.status) > rank(current.status))))) {
+            final localConflict = synced.conflictingPointageIds.contains(
+                KdriveAttendanceSync.recordId(record));
+            final currentIsLocalConflict = current != null &&
+                synced.conflictingPointageIds.contains(
+                    KdriveAttendanceSync.recordId(current));
+            if (current == null || localConflict ||
+                (!currentIsLocalConflict &&
+                 (record.revision > current.revision ||
+                  (record.revision == current.revision &&
+                   (record.timestamp.isAfter(current.timestamp) ||
+                    (record.timestamp.isAtSameMomentAs(current.timestamp) &&
+                     rank(record.status) > rank(current.status)))))) {
               effective[key] = record;
             }
           }
@@ -2756,8 +2921,17 @@ class _ClubNageHomeState extends State<ClubNageHome> with WidgetsBindingObserver
           _saveAttendance();
           _reconcileSessions();
         }
+        for (final entry in synced.remoteConflicts.entries) {
+          final local = records.where((r) =>
+              KdriveAttendanceSync.recordId(r) == entry.key).firstOrNull;
+          if (local != null) {
+            await _resolveAttendanceConflict(entry.value, local);
+          }
+        }
         messages.add('Séances : ${synced.uploadedSessions} envoyée(s), '
             '${synced.importedSessions} récupérée(s).');
+        messages.add('Corrections : ${synced.uploadedCorrections} événement(s) transmis, '
+            '${synced.corrections.length} au journal partagé.');
         messages.add('Présences : ${synced.uploadedPointages} envoyée(s), '
             '${synced.importedPointages} récupérée(s).');
         if (synced.conflicts.isNotEmpty) {
@@ -2779,6 +2953,15 @@ class _ClubNageHomeState extends State<ClubNageHome> with WidgetsBindingObserver
     padding: const EdgeInsets.all(16),
     children: [
       const Text('Synchronisation kDrive', style:TextStyle(fontSize:24,fontWeight:FontWeight.w900)),
+      ListTile(
+        leading: const Icon(Icons.phone_android),
+        title: Text(_deviceIdentity?.name ?? 'Identification du téléphone…'),
+        subtitle: Text('ID : ${_deviceIdentity?.id ?? "—"}'),
+        trailing: TextButton(onPressed: _deviceIdentity == null ? null : _renameDevice,
+          child: const Text('RENOMMER')),
+      ),
+      Text('Historique local : ${_corrections.length} correction(s)',
+        style: const TextStyle(color: Colors.white70)),
       FutureBuilder<PackageInfo>(future: PackageInfo.fromPlatform(),
         builder: (context, snapshot) => Text(snapshot.hasData
           ? 'ClubNage-NFC · version installée ${snapshot.data!.version} (${snapshot.data!.buildNumber})'

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models.dart';
+import 'correction_journal.dart';
 
 /// Versioned, app-private local snapshot. Never modifies existing uid_*/qr_* keys.
 /// Contains only member IDs, group IDs and attendance timestamps (no names).
@@ -10,11 +11,13 @@ class AttendanceSnapshot {
   final List<TrainingSession> sessions;
   final List<AttendanceRecord> records;
   final String? activeSessionId;
+  final List<AttendanceCorrection> corrections;
 
   const AttendanceSnapshot({
     required this.sessions,
     required this.records,
     required this.activeSessionId,
+    this.corrections = const [],
   });
 }
 
@@ -39,6 +42,8 @@ class LocalAttendanceStore {
       sessions: sessions,
       records: records,
       activeSessionId: data['activeSessionId'] as String?,
+      corrections: (data['corrections'] as List<dynamic>? ?? [])
+          .map((v) => AttendanceCorrection.fromJson(v as Map<String, dynamic>)).toList(),
     );
   }
 
@@ -49,6 +54,7 @@ class LocalAttendanceStore {
       'activeSessionId': snapshot.activeSessionId,
       'sessions': snapshot.sessions.map(_encodeSession).toList(),
       'records': snapshot.records.map(_encodeRecord).toList(),
+      'corrections': snapshot.corrections.map((e) => e.toJson()).toList(),
     });
     final ok = await prefs.setString(_key, raw);
     if (!ok) throw StateError('Écriture locale refusée.');
@@ -93,6 +99,7 @@ class LocalAttendanceStore {
     'method': r.method,
     'revision': r.revision,
     'updatedAt': r.updatedAt?.toIso8601String(),
+    'deviceId': r.deviceId,
   };
 
   static AttendanceRecord _decodeRecord(Map<String, dynamic> r) => AttendanceRecord(
@@ -104,6 +111,7 @@ class LocalAttendanceStore {
     method: r['method'] as String,
     revision: r['revision'] as int? ?? 0,
     updatedAt: _date(r['updatedAt']),
+    deviceId: r['deviceId'] as String? ?? '',
   );
 
   static DateTime? _date(dynamic value) => value == null ? null : DateTime.parse(value as String);

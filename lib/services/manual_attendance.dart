@@ -10,6 +10,7 @@ class ManualAttendance {
     required DateTime now,
     String method = 'MANUEL',
     bool authorizedClosedCorrection = false,
+    String deviceId = '',
   }) {
     if (!session.expectedMemberIds.contains(memberId)) {
       throw StateError('Licencié hors séance.');
@@ -30,7 +31,7 @@ class ManualAttendance {
       timestamp: previous.isEmpty ? now : previous.first.timestamp,
       status: status, method: method,
       revision: previous.isEmpty ? 0 : previous.first.revision + 1,
-      updatedAt: now,
+      updatedAt: now, deviceId: deviceId,
     );
   }
 }
