@@ -357,12 +357,23 @@ class KdriveAttendanceSync {
             ..sort((a, b) => a.newRevision.compareTo(b.newRevision));
           var revision = remoteRevision;
           var status = _parseStatus(previous[12]).name;
-          for (final event in chain) {
-            if (event.previousRevision != revision || event.previousStatus != status) break;
-            revision = event.newRevision;
-            status = event.newStatus;
+          // Suivre exclusivement la branche qui prolonge l'etat distant.
+          // Une correction concurrente a la meme revision peut figurer dans
+          // le journal, sans constituer un ancetre de la resolution retenue.
+          var ambiguousChain = false;
+          while (revision < entry.value.revision) {
+            final next = chain.where((e) =>
+                e.previousRevision == revision &&
+                e.newRevision == revision + 1 &&
+                e.previousStatus == status).toList();
+            if (next.length != 1) {
+              ambiguousChain = next.length > 1;
+              break;
+            }
+            revision = next.single.newRevision;
+            status = next.single.newStatus;
           }
-          if (revision == entry.value.revision && status == entry.value.status.name) {
+          if (!ambiguousChain && revision == entry.value.revision && status == entry.value.status.name) {
             newPointages.add(row);
           } else {
             conflicts.add('Pointage ${entry.key} : historique divergent, aucune ecriture.');
