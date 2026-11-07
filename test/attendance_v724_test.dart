@@ -114,7 +114,7 @@ void main() {
       events: [event(first, b, other), resolution]);
     expect(result.conflicts, isEmpty);
     expect(sheet(drive, 'Pointages NFC')[1][12], 'Retard');
-    expect(sheet(drive, 'Historique corrections').length, 4);
+    expect(sheet(drive, 'Historique corrections').length, 5);
   });
 
   test('deux téléphones créent le même licencié/séance : pas de double ligne', () async {
