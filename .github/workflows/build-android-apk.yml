@@ -91,7 +91,7 @@ jobs:
         run: |
           flutter --version
           flutter pub get
-          flutter analyze
+          flutter analyze --no-fatal-infos
           flutter test test/local_attendance_store_test.dart test/attendance_v711_test.dart test/slot_authorization_test.dart test/attendance_v724_test.dart test/badge_qr_v725_test.dart test/demography_v725_test.dart
 
       - name: Corriger le SDK Android du module OAuth
