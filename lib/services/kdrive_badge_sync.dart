@@ -8,17 +8,21 @@ import 'xlsx_data_reader.dart';
 /// Bilan d'une synchronisation de badges. Les conflits restent en attente.
 class BadgeSyncResult {
   final Map<String, String> sharedBadges;
+  final Map<String, String> sharedQrTokens;
   final List<String> conflicts;
   final int uploaded;
   final int pending;
   /// Affectations locales non confirmées, à préserver sur le téléphone.
   final Map<String, String> pendingBadges;
+  final Map<String, String> pendingQrTokens;
   const BadgeSyncResult({
     required this.sharedBadges,
+    required this.sharedQrTokens,
     required this.conflicts,
     required this.uploaded,
     required this.pending,
     required this.pendingBadges,
+    required this.pendingQrTokens,
   });
 }
 
@@ -39,14 +43,25 @@ class KdriveBadgeSync {
   }
 
   static Future<void> queueAssignment(Member member, String uid) async {
+    await _queue(member, uid.trim().toUpperCase(), 'NFC', '');
+  }
+
+  static Future<void> queueQrAssignment(Member member, String token,
+      {String previousToken = ''}) async {
+    await _queue(member, token.trim(), 'QR', previousToken.trim());
+  }
+
+  static Future<void> _queue(Member member, String token,
+      String type, String reference) async {
+    if (token.isEmpty) throw StateError('Identifiant de badge vide.');
     final prefs = await SharedPreferences.getInstance();
     final device = await _device(prefs);
     final pending = prefs.getStringList(_queueKey) ?? <String>[];
     final now = DateTime.now().toUtc().toIso8601String();
     final event = <String>[
-      '$device-$now', now, uid.toUpperCase(), member.id, 'NFC',
+      '$device-$now-${DateTime.now().microsecondsSinceEpoch}', now, token, member.id, type,
       'AFFECTATION', device, member.lastName, member.firstName,
-      '', '7.19', '', 'Affectation depuis téléphone',
+      '', '7.25', reference, 'Affectation depuis téléphone',
     ];
     pending.add(jsonEncode(event));
     if (!await prefs.setStringList(_queueKey, pending)) {
@@ -81,29 +96,73 @@ class KdriveBadgeSync {
         existing[row.first] = row;
       }
     }
-    final activeByUid = <String, String>{};
-    final activeByMember = <String, String>{};
+    // Deux espaces d'identifiants distincts : NFC (UID normalisé) et QR
+    // (jeton sensible à la casse). Le journal Excel conserve les deux types.
+    final activeNfcByToken = <String, String>{};
+    final activeNfcByMember = <String, String>{};
+    final activeQrByToken = <String, String>{};
+    final activeQrByMember = <String, String>{};
+    String tokenOf(List<String> event) => event[4] == 'NFC'
+        ? event[2].trim().toUpperCase() : event[2].trim();
     void apply(List<String> event) {
-      if (event.length < 6 || event[4] != 'NFC') return;
-      final uid = event[2].trim().toUpperCase();
+      if (event.length < 6 || event[5] != 'AFFECTATION') return;
+      final type = event[4];
+      if (type != 'NFC' && type != 'QR') return;
+      final token = tokenOf(event);
       final member = event[3].trim();
-      if (uid.isEmpty || member.isEmpty || event[5] != 'AFFECTATION') return;
-      final oldUid = activeByMember[member];
-      if (oldUid != null) activeByUid.remove(oldUid);
-      final oldMember = activeByUid[uid];
-      if (oldMember != null) activeByMember.remove(oldMember);
-      activeByUid[uid] = member;
-      activeByMember[member] = uid;
+      if (token.isEmpty || member.isEmpty) return;
+      final byToken = type == 'NFC' ? activeNfcByToken : activeQrByToken;
+      final byMember = type == 'NFC' ? activeNfcByMember : activeQrByMember;
+      final oldToken = byMember[member];
+      if (oldToken != null) byToken.remove(oldToken);
+      final oldMember = byToken[token];
+      if (oldMember != null) byMember.remove(oldMember);
+      byToken[token] = member;
+      byMember[member] = token;
     }
     final history = existing.values.toList()
-      ..sort((a, b) => a[1].compareTo(b[1]));
+      ..sort((a, b) {
+        final time = a[1].compareTo(b[1]);
+        return time != 0 ? time : a[0].compareTo(b[0]);
+      });
     for (final row in history) apply(row);
 
     final knownIds = members.map((m) => m.id).toSet();
+    // Migration non destructive des QR déjà affectés sur les 9 téléphones
+    // avant la V7.25 : aucun qr_* n'est effacé ou remplacé.
+    final pendingNow = <String>[...rawPending];
+    final pendingKeys = <String>{};
+    for (final raw in pendingNow) {
+      try {
+        final event = (jsonDecode(raw) as List).cast<String>();
+        if (event.length == 13 && event[4] == 'QR') {
+          pendingKeys.add('${event[3]}\u0000${event[2]}');
+        }
+      } catch (_) { /* Conservé, signalé plus bas. */ }
+    }
+    final device = await _device(prefs);
+    for (final member in members) {
+      final localQr = prefs.getString('qr_${member.id}')?.trim() ?? '';
+      if (localQr.isEmpty || activeQrByMember[member.id] == localQr ||
+          pendingKeys.contains('${member.id}\u0000$localQr')) continue;
+      final now = DateTime.now().toUtc().toIso8601String();
+      pendingNow.add(jsonEncode(<String>[
+        '$device-$now-${DateTime.now().microsecondsSinceEpoch}',
+        now, localQr, member.id, 'QR', 'AFFECTATION', device,
+        member.lastName, member.firstName, '', '7.25', '',
+        'Migration QR local existant : ne pas supprimer',
+      ]));
+      pendingKeys.add('${member.id}\u0000$localQr');
+    }
+    if (pendingNow.length != rawPending.length &&
+        !await prefs.setStringList(_queueKey, pendingNow)) {
+      throw StateError('Migration QR locale non sauvegardée : aucune écriture kDrive.');
+    }
+
     final accepted = <List<String>>[];
     final conflicts = <String>[];
     final remaining = <String>[];
-    for (final raw in rawPending) {
+    for (final raw in pendingNow) {
       List<String> event;
       try {
         event = (jsonDecode(raw) as List).cast<String>();
@@ -113,24 +172,35 @@ class KdriveBadgeSync {
         continue;
       }
       if (event.length != 13 || !knownIds.contains(event[3]) ||
-          event[2].trim().isEmpty || event[4] != 'NFC' ||
+          event[2].trim().isEmpty ||
+          (event[4] != 'NFC' && event[4] != 'QR') ||
           event[5] != 'AFFECTATION') {
         conflicts.add('Affectation locale invalide (conservée).');
         remaining.add(raw);
         continue;
       }
-      if (existing.containsKey(event[0])) {
-        // Événement déjà confirmé lors d'une synchronisation précédente.
-        continue;
-      }
-      final uid = event[2].trim().toUpperCase();
+      if (existing.containsKey(event[0])) continue;
+      final type = event[4];
+      final token = tokenOf(event);
       final member = event[3];
-      final owner = activeByUid[uid];
+      final byToken = type == 'NFC' ? activeNfcByToken : activeQrByToken;
+      final byMember = type == 'NFC' ? activeNfcByMember : activeQrByMember;
+      final owner = byToken[token];
       if (owner != null && owner != member) {
-        conflicts.add('Badge $uid : kDrive=$owner, local=$member.');
+        conflicts.add('$type $token : kDrive=$owner, local=$member.');
         remaining.add(raw);
         continue;
       }
+      final remoteToken = byMember[member];
+      if (type == 'QR' && remoteToken != null && remoteToken != token &&
+          event[11].trim() != remoteToken) {
+        conflicts.add('QR de $member : kDrive=$remoteToken, local=$token. '
+            'Réaffectation concurrente : aucune écriture.');
+        remaining.add(raw);
+        continue;
+      }
+      // Déjà partagé sur un autre téléphone : ne pas écrire de doublon.
+      if (remoteToken == token) continue;
       accepted.add(event);
       apply(event);
     }
@@ -156,7 +226,7 @@ class KdriveBadgeSync {
     // Un scan peut être enregistré pendant les appels réseau : préserver
     // les événements ajoutés depuis la lecture initiale de la file.
     final latest = prefs.getStringList(_queueKey) ?? <String>[];
-    final original = rawPending.toSet();
+    final original = pendingNow.toSet();
     final fresh = latest.where((raw) => !original.contains(raw)).toList();
     final preserved = <String>[...remaining, ...fresh];
     if (preserved.length != latest.length ||
@@ -167,13 +237,17 @@ class KdriveBadgeSync {
       }
     }
     final pendingBadges = <String, String>{};
+    final pendingQrTokens = <String, String>{};
     for (final raw in preserved) {
       try {
         final event = (jsonDecode(raw) as List).cast<String>();
-        if (event.length == 13 && event[4] == 'NFC' &&
-            event[5] == 'AFFECTATION' && event[3].isNotEmpty &&
-            event[2].trim().isNotEmpty) {
-          pendingBadges[event[3]] = event[2].trim().toUpperCase();
+        if (event.length == 13 && event[5] == 'AFFECTATION' &&
+            event[3].isNotEmpty && event[2].trim().isNotEmpty) {
+          if (event[4] == 'NFC') {
+            pendingBadges[event[3]] = event[2].trim().toUpperCase();
+          } else if (event[4] == 'QR') {
+            pendingQrTokens[event[3]] = event[2].trim();
+          }
         }
       } catch (_) {
         // Les événements invalides restent conservés dans la file.
@@ -181,11 +255,13 @@ class KdriveBadgeSync {
     }
 
     return BadgeSyncResult(
-      sharedBadges: Map.unmodifiable(activeByMember),
+      sharedBadges: Map.unmodifiable(activeNfcByMember),
+      sharedQrTokens: Map.unmodifiable(activeQrByMember),
       conflicts: List.unmodifiable(conflicts),
       uploaded: accepted.length,
       pending: preserved.length,
       pendingBadges: Map.unmodifiable(pendingBadges),
+      pendingQrTokens: Map.unmodifiable(pendingQrTokens),
     );
   }
 }

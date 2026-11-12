@@ -411,7 +411,11 @@ class _ClubNageHomeState extends State<ClubNageHome> with WidgetsBindingObserver
     final other = _memberForQr(normalized, excludeId: member.id);
     if (other != null) return 'Ce QR est déjà associé à ${other.fullName}.';
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('qr_${member.id}', normalized);
+    await KdriveBadgeSync.queueQrAssignment(member, normalized,
+        previousToken: _qrForMember(member));
+    if (!await prefs.setString('qr_${member.id}', normalized)) {
+      return 'QR conservé dans le journal local, mais écriture locale impossible.';
+    }
     if (mounted) setState(() => assignedQrTokens[member.id] = normalized);
     return null;
   }
@@ -2392,6 +2396,155 @@ class _ClubNageHomeState extends State<ClubNageHome> with WidgetsBindingObserver
     );
   }
 
+  // V7.25 : indicateurs calculés depuis le référentiel local officiel.
+  // Une seule occurrence par ID, sans inventer sexe ni date de naissance.
+  List<Member> get _demographicMembers {
+    final unique = <String, Member>{};
+    for (final m in members) {
+      if (statsGroupId == 'all' || m.groups.contains(statsGroupId)) {
+        unique[m.id] = m;
+      }
+    }
+    return unique.values.toList();
+  }
+
+  String _sexOf(Member m) {
+    final value = m.sex.trim().toUpperCase()
+        .replaceAll('É', 'E').replaceAll('È', 'E');
+    if (['F', 'FEMME', 'FEMININ', 'FEMALE'].contains(value)) return 'F';
+    if (['H', 'M', 'HOMME', 'MASCULIN', 'MALE'].contains(value)) return 'H';
+    return '?';
+  }
+
+  Widget _statsBar(String label, int count, int max,
+      {Color color = cyan, String? suffix}) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Expanded(child: Text(label, style: const TextStyle(fontSize: 13))),
+          Text(suffix ?? '$count', style: const TextStyle(fontWeight: FontWeight.bold)),
+        ]),
+        const SizedBox(height: 4),
+        LinearProgressIndicator(value: max == 0 ? 0.0 : count / max,
+          minHeight: 11, borderRadius: BorderRadius.circular(6),
+          backgroundColor: Colors.white12, color: color),
+      ]),
+    );
+  }
+
+  Widget _demographicsDashboard() {
+    final people = _demographicMembers;
+    final women = people.where((m) => _sexOf(m) == 'F').toList();
+    final men = people.where((m) => _sexOf(m) == 'H').toList();
+    final unknown = people.length - women.length - men.length;
+    final ages = people.map((m) => m.age)
+        .whereType<int>().where((a) => a >= 0 && a <= 110).toList();
+    final meanAge = ages.isEmpty ? '—'
+        : '${(ages.reduce((a, b) => a + b) / ages.length).toStringAsFixed(1)} ans';
+    final bands = <(String, int, int)>[
+      ('0–5 ans', 0, 5), ('6–10 ans', 6, 10),
+      ('11–14 ans', 11, 14), ('15–17 ans', 15, 17),
+      ('18–24 ans', 18, 24), ('25–39 ans', 25, 39),
+      ('40–59 ans', 40, 59), ('60 ans et +', 60, 110),
+    ];
+    final ageCounts = bands.map((band) => people.where((m) {
+      final age = m.age;
+      return age != null && age >= band.$2 && age <= band.$3;
+    }).length).toList();
+    final maxAge = ageCounts.fold<int>(0, (a, b) => a > b ? a : b);
+    final nfcCount = people.where((m) =>
+        (assignedUids[m.id] ?? m.nfcUid).isNotEmpty).length;
+    final qrCount = people.where((m) =>
+        (assignedQrTokens[m.id] ?? m.qrToken).isNotEmpty).length;
+    return Card(child: Padding(padding: const EdgeInsets.all(16),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const Text('Profil des licenciés',
+          style: TextStyle(fontSize: 19, fontWeight: FontWeight.w900)),
+        const SizedBox(height: 6),
+        Text('Base importée • ${people.length} licencié(s) distinct(s)',
+          style: const TextStyle(color: Colors.white60, fontSize: 12)),
+        const SizedBox(height: 12),
+        Row(children: [
+          Expanded(child: _metric('Femmes', '${women.length}', Icons.female, cyan)),
+          const SizedBox(width: 8),
+          Expanded(child: _metric('Hommes', '${men.length}', Icons.male, blue)),
+        ]),
+        const SizedBox(height: 8),
+        Row(children: [
+          Expanded(child: _metric('Âge moyen', meanAge, Icons.cake_outlined, green)),
+          const SizedBox(width: 8),
+          Expanded(child: _metric('Sans sexe', '$unknown', Icons.help_outline, orange)),
+        ]),
+        const SizedBox(height: 16),
+        const Text('Répartition femmes / hommes',
+          style: TextStyle(fontWeight: FontWeight.w800)),
+        const SizedBox(height: 8),
+        _statsBar('Femmes', women.length, people.length, color: cyan,
+          suffix: people.isEmpty ? '0 %' :
+            '${(100 * women.length / people.length).toStringAsFixed(1)} %'),
+        _statsBar('Hommes', men.length, people.length, color: blue,
+          suffix: people.isEmpty ? '0 %' :
+            '${(100 * men.length / people.length).toStringAsFixed(1)} %'),
+        if (unknown > 0) _statsBar('Non renseigné', unknown, people.length,
+          color: orange),
+        const SizedBox(height: 12),
+        const Text('Pyramide des âges (effectifs par tranche)',
+          style: TextStyle(fontWeight: FontWeight.w800)),
+        const SizedBox(height: 8),
+        for (var i = 0; i < bands.length; i++)
+          _statsBar(bands[i].$1, ageCounts[i], maxAge, color: cyan),
+        if (ages.length < people.length)
+          Text('${people.length - ages.length} date(s) de naissance absente(s) '
+            'ou invalide(s) : exclue(s) de la moyenne.',
+            style: const TextStyle(color: Colors.white60, fontSize: 12)),
+        const SizedBox(height: 12),
+        Text('Badges attribués : $nfcCount NFC • $qrCount QR',
+          style: const TextStyle(fontWeight: FontWeight.w700)),
+      ]),
+    ));
+  }
+
+  Widget _attendanceCharts(List<TrainingSession> filteredSessions) {
+    final countsByDay = <String, int>{};
+    final countsByGroup = <String, int>{};
+    for (final session in filteredSessions) {
+      final day = '${session.date.year}-${session.date.month.toString().padLeft(2, '0')}'
+          '-${session.date.day.toString().padLeft(2, '0')}';
+      final count = _presentMemberIdsForSession(session).length;
+      countsByDay[day] = (countsByDay[day] ?? 0) + count;
+      countsByGroup[session.groupId] = (countsByGroup[session.groupId] ?? 0) + count;
+    }
+    final days = countsByDay.keys.toList()..sort();
+    final recentDays = days.length <= 12 ? days : days.sublist(days.length - 12);
+    final groupsSorted = countsByGroup.keys.toList()
+      ..sort((a, b) => countsByGroup[b]!.compareTo(countsByGroup[a]!));
+    final maxDay = countsByDay.values.fold<int>(0, (a, b) => a > b ? a : b);
+    final maxGroup = countsByGroup.values.fold<int>(0, (a, b) => a > b ? a : b);
+    return Card(child: Padding(padding: const EdgeInsets.all(16),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const Text('Graphiques de fréquentation',
+          style: TextStyle(fontSize: 19, fontWeight: FontWeight.w900)),
+        const SizedBox(height: 12),
+        const Text('Présences par jour (12 derniers jours avec séance)',
+          style: TextStyle(fontWeight: FontWeight.w700)),
+        const SizedBox(height: 8),
+        if (recentDays.isEmpty) const Text('Aucune séance clôturée sur la période.'),
+        for (final day in recentDays)
+          _statsBar(day, countsByDay[day]!, maxDay, color: green),
+        const SizedBox(height: 12),
+        const Text('Présences par groupe',
+          style: TextStyle(fontWeight: FontWeight.w700)),
+        const SizedBox(height: 8),
+        for (final group in groupsSorted)
+          _statsBar(_groupById(group).name, countsByGroup[group]!, maxGroup,
+            color: blue),
+        const Text('Un licencié est compté une seule fois par séance.',
+          style: TextStyle(color: Colors.white60, fontSize: 12)),
+      ]),
+    ));
+  }
+
   Widget _statsPage() {
     final filteredSessions = _filteredStatsSessions;
     final sessionCount = filteredSessions.length;
@@ -2570,6 +2723,10 @@ class _ClubNageHomeState extends State<ClubNageHome> with WidgetsBindingObserver
           ],
         ),
 
+        const SizedBox(height: 18),
+        _demographicsDashboard(),
+        const SizedBox(height: 12),
+        _attendanceCharts(filteredSessions),
         const SizedBox(height: 18),
 
         if (filteredSessions.isEmpty)
@@ -2827,11 +2984,27 @@ class _ClubNageHomeState extends State<ClubNageHome> with WidgetsBindingObserver
             }
           }
         }
+        // QR partagés : ne jamais écraser une affectation locale en attente
+        // ou conflictuelle ; la synchronisation garde sa trace sur kDrive.
+        final mergedQr = <String, String>{...badges.sharedQrTokens};
+        for (final entry in badges.pendingQrTokens.entries) {
+          mergedQr[entry.key] = entry.value;
+        }
+        for (final m in members) {
+          final qr = mergedQr[m.id];
+          if (qr != null) {
+            if (!await prefs.setString('qr_${m.id}', qr)) {
+              throw StateError('Sauvegarde locale du QR impossible : ${m.id}');
+            }
+          }
+        }
         if (mounted) setState(() {
           assignedUids..addAll(merged);
+          assignedQrTokens..addAll(mergedQr);
         });
-        messages.add('Badges : ${badges.sharedBadges.length} partagés, '
-            '${badges.uploaded} nouveau(x) envoyé(s).');
+        messages.add('Badges NFC : ${badges.sharedBadges.length} partagés. '
+            'QR : ${badges.sharedQrTokens.length} partagés. '
+            '${badges.uploaded} affectation(s) envoyée(s).');
         if (badges.conflicts.isNotEmpty) {
           messages.add('Conflits (${badges.conflicts.length}) : '
               '${badges.conflicts.join(' ; ')}');

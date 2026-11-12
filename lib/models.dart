@@ -5,6 +5,7 @@ class Member {
   final List<String> groups;
   final String nfcUid;
   final String qrToken;
+  final String sex;
   final String dossierStatus;
   final String email;
   final String phone;
@@ -25,6 +26,7 @@ class Member {
     required this.groups,
     required this.nfcUid,
     required this.qrToken,
+    this.sex = '',
     this.dossierStatus = 'Validé',
     this.email = '',
     this.phone = '',

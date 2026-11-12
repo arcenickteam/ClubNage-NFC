@@ -1,5 +1,4 @@
 import 'dart:typed_data';
-import 'package:package_info_plus/package_info_plus.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'services/infomaniak_kdrive_service.dart';
@@ -260,6 +259,7 @@ class _V7ImportScreenState extends State<V7ImportScreen> {
           'creneau': col('Créneau') >= 0 ? cell(row, col('Créneau')) : '',
           'niveau': col('Niveau') >= 0 ? cell(row, col('Niveau')) : '',
           'dateNaissance': col('Date naissance') >= 0 ? cell(row, col('Date naissance')) : '',
+          'sexe': col('Sexe') >= 0 ? cell(row, col('Sexe')) : '',
           'ville': col('Ville') >= 0 ? cell(row, col('Ville')) : '',
           'telephone': col('Téléphone licencié') >= 0 ? cell(row, col('Téléphone licencié')) : '',
           'telephoneTuteur': col('Téléphone responsable légal') >= 0 ? cell(row, col('Téléphone responsable légal')) : '',
@@ -322,13 +322,8 @@ class _V7ImportScreenState extends State<V7ImportScreen> {
     final visible = people.where((p) => '${p['nom']} ${p['prenom']} ${p['groupes']} ${p['id']}'
         .toLowerCase().contains(q)).toList();
     return Scaffold(
-      appBar: AppBar(title: const Text('Importation kDrive')),
+      appBar: AppBar(title: const Text('V7.16 · kDrive')),
       body: ListView(padding: const EdgeInsets.all(16), children: [
-        FutureBuilder<PackageInfo>(future: PackageInfo.fromPlatform(),
-          builder: (context, snapshot) => Text(snapshot.hasData
-            ? 'ClubNage-NFC · version installée ${snapshot.data!.version} (${snapshot.data!.buildNumber})'
-            : 'Lecture de la version installée…'),),
-        const SizedBox(height: 8),
         const Text('Importation de la base officielle et du planning depuis kDrive. Les badges et les présences sont synchronisés depuis l’écran principal.'),
         const SizedBox(height: 12),
         FilledButton.icon(onPressed: busy ? null : configureApiToken, icon: const Icon(Icons.key), label: const Text('Configurer le jeton API kDrive')),
