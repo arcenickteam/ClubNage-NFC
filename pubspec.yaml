@@ -8,6 +8,7 @@ environment:
   flutter: '>=3.35.0'
 
 dependencies:
+  package_info_plus: ^8.3.1
   flutter:
     sdk: flutter
   nfc_manager: ^4.2.1
