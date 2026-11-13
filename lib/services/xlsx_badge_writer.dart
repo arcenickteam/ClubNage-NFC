@@ -8,6 +8,7 @@ import 'xlsx_data_reader.dart';
 /// Les autres feuilles, formules, styles et relations sont recopiés tels quels.
 class XlsxBadgeWriter {
   static const sheetName = 'Badges V715';
+  static const qrSheetName = 'QR V725';
   static const headers = <String>[
     'Evenement_ID', 'Horodatage_UTC', 'Badge_UID', 'Licencie_ID',
     'Type', 'Action', 'Appareil_ID', 'Nom', 'Prenom',
@@ -26,7 +27,7 @@ class XlsxBadgeWriter {
     return s;
   }
 
-  static Uint8List merge(Uint8List bytes, List<List<String>> additions) {
+  static Uint8List merge(Uint8List bytes, List<List<String>> additions, {String targetSheet = sheetName}) {
     final source = ZipDecoder().decodeBytes(bytes, verify: true);
     final parts = <String, List<int>>{};
     for (final file in source.files) {
@@ -50,9 +51,9 @@ class XlsxBadgeWriter {
     final rels = XmlDocument.parse(read('xl/_rels/workbook.xml.rels'));
     final contentTypes = XmlDocument.parse(read('[Content_Types].xml'));
     final existing = workbook.descendants.whereType<XmlElement>().where(
-      (e) => e.name.local == 'sheet' && e.getAttribute('name') == sheetName,
+      (e) => e.name.local == 'sheet' && e.getAttribute('name') == targetSheet,
     ).toList();
-    final existingRows = existing.isEmpty ? <List<String>>[] : XlsxDataReader.readSheet(bytes, sheetName);
+    final existingRows = existing.isEmpty ? <List<String>>[] : XlsxDataReader.readSheet(bytes, targetSheet);
     if (existingRows.isNotEmpty && !_sameHeader(existingRows.first)) {
       throw StateError('Onglet Pointages NFC existant avec colonnes incompatibles. Aucun fichier modifié.');
     }
@@ -108,7 +109,7 @@ class XlsxBadgeWriter {
       while (parts.containsKey('xl/worksheets/sheet$index.xml')) { index++; }
       sheetPath = 'xl/worksheets/sheet$index.xml';
       sheets.children.add(XmlElement(XmlName('sheet'), [
-        XmlAttribute(XmlName('name'), sheetName),
+        XmlAttribute(XmlName('name'), targetSheet),
         XmlAttribute(XmlName('sheetId'), '${maxSheetId + 1}'),
         XmlAttribute(XmlName('id', 'r'), 'rId$nextRel'),
       ]));
