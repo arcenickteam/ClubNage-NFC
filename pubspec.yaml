@@ -1,7 +1,7 @@
 name: clubnage_nfc
 publish_to: 'none'
 description: Club MN NFC - Montchanin Natation
-version: 7.25.1+26
+version: 7.25.2+252
 
 environment:
   sdk: '>=3.11.0 <4.0.0'
