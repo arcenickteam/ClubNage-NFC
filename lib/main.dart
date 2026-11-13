@@ -2959,6 +2959,8 @@ class _ClubNageHomeState extends State<ClubNageHome> with WidgetsBindingObserver
     if (_syncingKdrive || !_attendanceLoaded || _attendanceError != null) return;
     setState(() { _syncingKdrive = true; _kdriveSyncMessage = 'Synchronisation en cours…'; });
     final messages = <String>[];
+    final alerts = <String>[];
+    var duplicateCount = 0;
     try {
       await _pendingAttendanceSave;
       final saveError = _attendanceError;
@@ -3006,11 +3008,10 @@ class _ClubNageHomeState extends State<ClubNageHome> with WidgetsBindingObserver
             'QR : ${badges.sharedQrTokens.length} partagés. '
             '${badges.uploaded} affectation(s) envoyée(s).');
         if (badges.conflicts.isNotEmpty) {
-          messages.add('Conflits (${badges.conflicts.length}) : '
-              '${badges.conflicts.join(' ; ')}');
+          alerts.add('${badges.conflicts.length} conflit(s) QR/NFC à examiner');
         }
         if (badges.pending > 0) {
-          messages.add('${badges.pending} affectation(s) locale(s) en attente : ne pas réaffecter ces badges avant résolution.');
+          alerts.add('${badges.pending} affectation(s) locale(s) en attente');
         }
       } catch (e) {
         messages.add('Badges : échec, données locales conservées : $e');
@@ -3108,10 +3109,23 @@ class _ClubNageHomeState extends State<ClubNageHome> with WidgetsBindingObserver
         messages.add('Présences : ${synced.uploadedPointages} envoyée(s), '
             '${synced.importedPointages} récupérée(s).');
         if (synced.conflicts.isNotEmpty) {
-          messages.add('À vérifier : ${synced.conflicts.join(' ; ')}');
+          duplicateCount = synced.conflicts.where((c) =>
+              c.startsWith('Doublon historique sur kDrive')).length;
+          final blockedDuplicates = synced.conflicts.where((c) =>
+              c.startsWith('Pointages métier déjà dupliqués')).length;
+          messages.add('Doublons historiques : $duplicateCount cas ; '
+              '$blockedDuplicates nouvelle(s) écriture(s) bloquée(s).');
+          final otherConflicts = synced.conflicts.length -
+              duplicateCount - blockedDuplicates;
+          if (otherConflicts > 0) alerts.add('$otherConflicts autre(s) anomalie(s) de pointage');
         }
       } catch (e) {
         messages.add('Séances / présences : échec, données locales conservées : $e');
+      }
+      if (alerts.isNotEmpty) {
+        messages.add('À examiner : ${alerts.join(' ; ')}. Données locales conservées.');
+      } else {
+        messages.add('Bilan terminé : aucune anomalie nouvelle signalée.');
       }
       if (mounted) setState(() => _kdriveSyncMessage = messages.join('\n'));
     } catch (e) {
