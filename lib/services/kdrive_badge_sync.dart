@@ -87,12 +87,29 @@ class KdriveBadgeSync {
     if (rows.isNotEmpty && rows.first.join('|') != XlsxBadgeWriter.headers.join('|')) {
       throw StateError('Onglet Badges V715 incompatible : aucune modification.');
     }
+    // QR historiques : lus dans l'ancien journal sans jamais les supprimer.
+    final qrHistory = <List<String>>[];
+    try {
+      final qrRows = XlsxDataReader.readSheet(before, XlsxBadgeWriter.qrSheetName);
+      if (qrRows.isNotEmpty && qrRows.first.join('|') != XlsxBadgeWriter.headers.join('|')) {
+        throw StateError('Onglet QR incompatible : aucune modification.');
+      }
+      qrHistory.addAll(qrRows.skip(1));
+    } on FormatException catch (e) {
+      if (!e.message.toString().contains('absent du classeur')) rethrow;
+    }
     final existing = <String, List<String>>{};
     for (final row in rows.skip(1)) {
       if (row.isNotEmpty && row.first.isNotEmpty) {
         if (existing.containsKey(row.first)) {
           throw StateError('Événement badge dupliqué dans Excel.');
         }
+        existing[row.first] = row;
+      }
+    }
+    for (final row in qrHistory) {
+      if (row.isNotEmpty && row.first.isNotEmpty) {
+        if (existing.containsKey(row.first)) throw StateError('Événement QR dupliqué dans Excel.');
         existing[row.first] = row;
       }
     }
@@ -211,12 +228,24 @@ class KdriveBadgeSync {
       }
       final now = DateTime.now().toUtc().toIso8601String();
       for (final event in accepted) event[9] = now;
-      final updated = XlsxBadgeWriter.merge(before, accepted);
+      final nfcEvents = accepted.where((e) => e[4] == 'NFC').toList();
+      final qrEvents = accepted.where((e) => e[4] == 'QR').toList();
+      var updated = before;
+      if (nfcEvents.isNotEmpty) updated = XlsxBadgeWriter.merge(updated, nfcEvents);
+      if (qrEvents.isNotEmpty) updated = XlsxBadgeWriter.merge(updated, qrEvents,
+          targetSheet: XlsxBadgeWriter.qrSheetName);
       await api.replaceScheduleIfUnchanged(updated, etag);
       final after = await api.downloadWorkbook(InfomaniakKdriveService.scheduleName);
-      final confirmed = XlsxDataReader.readSheet(after, XlsxBadgeWriter.sheetName);
-      final confirmedIds = confirmed.skip(1)
-          .where((r) => r.isNotEmpty).map((r) => r.first).toSet();
+      final confirmedIds = <String>{};
+      for (final sheet in [XlsxBadgeWriter.sheetName, XlsxBadgeWriter.qrSheetName]) {
+        try {
+          final confirmed = XlsxDataReader.readSheet(after, sheet);
+          confirmedIds.addAll(confirmed.skip(1)
+              .where((r) => r.isNotEmpty).map((r) => r.first));
+        } on FormatException catch (e) {
+          if (!e.message.toString().contains('absent du classeur')) rethrow;
+        }
+      }
       if (!accepted.every((r) => confirmedIds.contains(r.first))) {
         throw StateError('Affectations non confirmées : journal local conservé.');
       }
