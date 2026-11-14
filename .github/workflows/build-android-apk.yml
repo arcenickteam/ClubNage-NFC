@@ -94,29 +94,28 @@ jobs:
           flutter analyze --no-fatal-infos
           flutter test test/local_attendance_store_test.dart test/attendance_v711_test.dart test/slot_authorization_test.dart test/attendance_v724_test.dart test/badge_qr_v725_test.dart test/demography_v725_test.dart
 
-      - name: Corriger le SDK Android du module OAuth
+      - name: Vérifier la configuration SDK du module OAuth
+        shell: bash
         run: |
           python3 - <<'PATCH'
           from pathlib import Path
           import re
-          files = list(Path.home().glob('.pub-cache/hosted/pub.dev/flutter_appauth-*/android/build.gradle'))
-          if len(files) != 1:
-              raise SystemExit(f'Module OAuth introuvable : {files}')
-          p = files[0]
-          s = p.read_text()
-          patterns = [
-              r'compileSdkVersion\s+33\b',
-              r'compileSdk\s*(?:=\s*)?33\b',
-          ]
-          updated = s
-          for pattern in patterns:
-              updated, n = re.subn(pattern, 'compileSdk 36', updated, count=1)
-              if n:
-                  break
-          if updated == s:
-              raise SystemExit('SDK 33 introuvable dans flutter_appauth : vérifier la configuration Gradle')
-          p.write_text(updated)
-          print('SDK OAuth corrigé vers 36')
+          files = list(Path.home().glob('.pub-cache/hosted/pub.dev/flutter_appauth-*/android/build.gradle*'))
+          if not files:
+              raise SystemExit('Module flutter_appauth introuvable dans le cache Pub')
+          for p in files:
+              s = p.read_text()
+              found = re.search(r'compileSdk(?:Version)?\s*(?:=\s*)?(\d+)', s)
+              if not found:
+                  print(f'{p}: compileSdk non explicite, configuration conservée')
+                  continue
+              sdk = int(found.group(1))
+              if sdk >= 36:
+                  print(f'{p}: SDK {sdk} déjà compatible, aucune modification')
+                  continue
+              updated = s[:found.start(1)] + '36' + s[found.end(1):]
+              p.write_text(updated)
+              print(f'{p}: SDK {sdk} -> 36')
           PATCH
 
       - name: Construire l'APK de production signé
@@ -162,7 +161,7 @@ jobs:
       - name: Nommer l'APK selon la version
         shell: bash
         run: |
-          VERSION=$(echo "${GITHUB_REF_NAME}" | grep -oE 'v[0-9]+[.][0-9]+' | head -1)
+          VERSION=$(echo "${GITHUB_REF_NAME}" | grep -oE 'v[0-9]+([.][0-9]+)+' | head -1)
           if [ -z "$VERSION" ]; then
             echo "ERREUR : version introuvable dans la branche"
             exit 1
