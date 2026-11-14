@@ -113,8 +113,15 @@ class _ClubNageHomeState extends State<ClubNageHome> with WidgetsBindingObserver
   List<Member> get members => _rosterImported ? _importedMembers : _demoMembers;
   List<TrainingGroup> get groups {
     if (!_rosterImported) return _demoGroups;
-    final names = members.expand((m) => m.groups).toSet().toList()..sort();
-    return names.map((name) => TrainingGroup(name, name, 'Selon planning kDrive', '—', '—')).toList();
+    // Les activités sur demande doivent rester sélectionnables même lorsque
+    // le fichier d'inscription ne comporte encore aucun adhérent affecté.
+    final names = <String>{
+      ...members.expand((m) => m.groups),
+      'Aquaphobie',
+      'Coaching',
+      'Groupe adulte débutant',
+    }.toList()..sort();
+    return names.map((name) => TrainingGroup(name, name, 'Selon planning kDrive / sur demande', '—', '—')).toList();
   }
 
   Future<void> _restoreRoster() async {
