@@ -1,4 +1,5 @@
 import 'dart:typed_data';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'services/infomaniak_kdrive_service.dart';
@@ -19,6 +20,7 @@ class _V7ImportScreenState extends State<V7ImportScreen> {
   String status = 'Aucun fichier chargé';
   String filter = '';
   bool busy = false;
+  late final Future<PackageInfo> _packageInfo = PackageInfo.fromPlatform();
   final kdrive = InfomaniakKdriveService();
   final rosterStore = LocalRosterStore();
 
@@ -37,6 +39,9 @@ class _V7ImportScreenState extends State<V7ImportScreen> {
           people = restored.map((m) => {
             'id': m.id, 'nom': m.lastName, 'prenom': m.firstName,
             'groupes': m.groups.join(', '),
+            'categorie': m.category, 'session1': m.session1,
+            'session2': m.session2, 'creneau': m.authorizedSlots,
+            'statutDossier': m.dossierStatus,
           }).toList();
         });
       }
@@ -322,7 +327,12 @@ class _V7ImportScreenState extends State<V7ImportScreen> {
     final visible = people.where((p) => '${p['nom']} ${p['prenom']} ${p['groupes']} ${p['id']}'
         .toLowerCase().contains(q)).toList();
     return Scaffold(
-      appBar: AppBar(title: const Text('V7.16 · kDrive')),
+      appBar: AppBar(title: FutureBuilder<PackageInfo>(
+        future: _packageInfo,
+        builder: (context, snapshot) => Text(snapshot.hasData
+            ? 'V${snapshot.data!.version} (${snapshot.data!.buildNumber}) · kDrive'
+            : 'kDrive'),
+      )),
       body: ListView(padding: const EdgeInsets.all(16), children: [
         const Text('Importation de la base officielle et du planning depuis kDrive. Les badges et les présences sont synchronisés depuis l’écran principal.'),
         const SizedBox(height: 12),

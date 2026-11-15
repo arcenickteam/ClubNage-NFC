@@ -6,9 +6,11 @@ import '../models.dart';
 class LocalRosterStore {
   static const key = 'clubnage_v76_roster_v1';
 
-  Future<List<Member>?> load() async {
+  static const archiveKey = 'clubnage_roster_archive_v1';
+
+  Future<List<Member>?> load({bool archive = false}) async {
     final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(key);
+    final raw = prefs.getString(archive ? archiveKey : key);
     if (raw == null) return null;
     final value = jsonDecode(raw);
     if (value is! Map || value['schema'] != 1 || value['members'] is! List) {
@@ -77,6 +79,20 @@ class LocalRosterStore {
       });
     }
     final prefs = await SharedPreferences.getInstance();
+    // Conserver l'identité historique avant de remplacer la liste active.
+    final archive = <String, dynamic>{};
+    for (final storageKey in [archiveKey, key]) {
+      final raw = prefs.getString(storageKey);
+      if (raw == null) continue;
+      final previous = jsonDecode(raw) as Map;
+      for (final item in previous['members'] as List) {
+        archive[item['id'] as String] = item;
+      }
+    }
+    if (!await prefs.setString(archiveKey,
+        jsonEncode({'schema': 1, 'members': archive.values.toList()}))) {
+      throw StateError('Archivage impossible : base locale conservée.');
+    }
     final ok = await prefs.setString(key, jsonEncode({'schema': 1, 'members': members}));
     if (!ok) throw StateError('Impossible de conserver les licenciés localement.');
   }

@@ -21,7 +21,8 @@ class ManualAttendance {
     if (![AttendanceStatus.present, AttendanceStatus.late, AttendanceStatus.absent].contains(status)) {
       throw ArgumentError('Statut non enregistrable.');
     }
-    final previous = records.where((r) => r.sessionId == session.id && r.memberId == memberId).toList();
+    final previous = records.where((r) => r.sessionId == session.id && r.memberId == memberId &&
+        r.status != AttendanceStatus.refused).toList();
     if (!session.isOpen && previous.isEmpty) {
       throw StateError('Correction impossible : aucun pointage initial.');
     }

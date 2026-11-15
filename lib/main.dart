@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'services/manual_attendance.dart';
+import 'services/session_roster.dart';
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -109,6 +110,7 @@ class _ClubNageHomeState extends State<ClubNageHome> with WidgetsBindingObserver
   final List<Member> _demoMembers = const <Member>[];
 
   List<Member> _importedMembers = [];
+  List<Member> _archivedMembers = [];
   bool _rosterImported = false;
   List<Member> get members => _rosterImported ? _importedMembers : _demoMembers;
   List<TrainingGroup> get groups {
@@ -127,9 +129,11 @@ class _ClubNageHomeState extends State<ClubNageHome> with WidgetsBindingObserver
   Future<void> _restoreRoster() async {
     try {
       final loaded = await LocalRosterStore().load();
-      if (!mounted || loaded == null) return;
+      final archived = await LocalRosterStore().load(archive: true);
+      if (!mounted) return;
       setState(() {
-        _importedMembers = loaded;
+        _importedMembers = loaded ?? [];
+        _archivedMembers = archived ?? [];
         _rosterImported = true;
         memberGroupFilter = 'all';
         // Ne pas écraser le groupe d'une séance déjà restaurée.
@@ -250,7 +254,13 @@ class _ClubNageHomeState extends State<ClubNageHome> with WidgetsBindingObserver
     final now = DateTime.now();
     var changed = false;
     for (var i = 0; i < sessions.length; i++) {
-      final s = sessions[i];
+      final original = sessions[i];
+      final s = SessionRoster.refresh(original, members, records);
+      if (!identical(original, s)) {
+        sessions[i] = s;
+        if (activeSession?.id == s.id) activeSession = s;
+        changed = true;
+      }
       final deadline = s.openedAt.add(const Duration(hours: 10));
       if (s.isOpen && !now.isBefore(deadline)) {
         sessions[i] = s.close(now);
@@ -455,20 +465,7 @@ class _ClubNageHomeState extends State<ClubNageHome> with WidgetsBindingObserver
   List<Member> get expectedMembers {
     final s = activeSession;
     if (s != null && s.isOpen) {
-      // Les anciennes séances importées peuvent contenir une liste d'attendus
-      // incomplète. Ne pas masquer le reste du groupe lors de l'appel manuel.
-      // Les identifiants déjà pointés restent également visibles.
-      final ids = <String>{...s.expectedMemberIds};
-      for (final record in records) {
-        if (record.sessionId == s.id) ids.add(record.memberId);
-      }
-      // Repli uniquement lorsque la liste d'attendus est manifestement vide
-      // ou réduite à une seule personne (incident remonté sur V7.23).
-      if (ids.length <= 1) {
-        return members.where((m) => ids.contains(m.id) ||
-            GroupEligibility.anyMatch(m.groups, s.eligibleGroupIds.isNotEmpty
-                ? s.eligibleGroupIds : [s.groupId])).toList();
-      }
+      final ids = s.expectedMemberIds.toSet();
       return members.where((m) => ids.contains(m.id)).toList();
     }
     return members.where((m) =>
@@ -1960,6 +1957,7 @@ class _ClubNageHomeState extends State<ClubNageHome> with WidgetsBindingObserver
 
   void _setManualAttendance(Member member, AttendanceStatus status) {
     if (_closingSession || !_attendanceLoaded || _attendanceError != null) return;
+    _reconcileSessions();
     final session = activeSession;
     if (session == null || !session.isOpen) return;
     try {
@@ -3223,7 +3221,7 @@ class _ClubNageHomeState extends State<ClubNageHome> with WidgetsBindingObserver
     for (final g in groups) { if (GroupEligibility.anyMatch([g.id], [id])) return g; }
     return TrainingGroup(id, id, 'Selon planning', '—', '—');
   }
-  Member _memberById(String id) => members.firstWhere((m) => m.id == id, orElse: () => Member(id:id,firstName:'Licencié',lastName:id,groups:const [],nfcUid:'',qrToken:''));
+  Member _memberById(String id) => [...members, ..._archivedMembers].firstWhere((m) => m.id == id, orElse: () => Member(id:id,firstName:'Licencié',lastName:id,groups:const [],nfcUid:'',qrToken:''));
   String _time(DateTime d) => '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
 }
 
