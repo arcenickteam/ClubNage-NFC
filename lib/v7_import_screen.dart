@@ -6,6 +6,48 @@ import 'services/infomaniak_kdrive_service.dart';
 import 'services/xlsx_data_reader.dart';
 import 'services/local_roster_store.dart';
 
+String clubRosterCell(List<String> row, int index) { if (index < 0 || index >= row.length) return ''; return row[index].trim(); }
+List<Map<String, String>> parseClubMembers(List<List<String>> rows) {
+    if (rows.length < 5) {
+      throw const FormatException('Onglet « Licenciés » absent ou vide.');
+    }
+    final header = List<String>.generate(rows[3].length, (i) => clubRosterCell(rows[3], i));
+    int col(String name) => header.indexWhere((x) => x.toLowerCase() == name.toLowerCase());
+    final id = col('Licencie_ID');
+    final nom = col('Nom');
+    final prenom = col('Prénom');
+    if (id < 0 || nom < 0 || prenom < 0) {
+      throw const FormatException('Colonnes identifiant / nom / prénom absentes.');
+    }
+  final result = <Map<String, String>>[];
+    for (final row in rows.skip(4)) {
+      if (clubRosterCell(row, id).isEmpty) continue;
+      final activeGroups = <String>[];
+      for (var i = 25; i < header.length && i < row.length; i++) {
+        final v = clubRosterCell(row, i).toLowerCase();
+        if (v == '1' || v == 'true' || v == 'vrai') activeGroups.add(header[i]);
+      }
+      result.add({
+        'id': clubRosterCell(row, id), 'nom': clubRosterCell(row, nom), 'prenom': clubRosterCell(row, prenom),
+        'categorie': col('Catégorie') >= 0 ? clubRosterCell(row, col('Catégorie')) : '',
+        'session1': col('Session 1') >= 0 ? clubRosterCell(row, col('Session 1')) : '',
+        'session2': col('Session 2') >= 0 ? clubRosterCell(row, col('Session 2')) : '',
+        'creneau': col('Créneau') >= 0 ? clubRosterCell(row, col('Créneau')) : '',
+        'niveau': col('Niveau') >= 0 ? clubRosterCell(row, col('Niveau')) : '',
+        'dateNaissance': col('Date naissance') >= 0 ? clubRosterCell(row, col('Date naissance')) : '',
+        'sexe': col('Sexe') >= 0 ? clubRosterCell(row, col('Sexe')) : '',
+        'ville': col('Ville') >= 0 ? clubRosterCell(row, col('Ville')) : '',
+        'telephone': col('Téléphone licencié') >= 0 ? clubRosterCell(row, col('Téléphone licencié')) : '',
+        'telephoneTuteur': col('Téléphone responsable légal') >= 0 ? clubRosterCell(row, col('Téléphone responsable légal')) : '',
+        'representantLegal': col('Représentant légal') >= 0 ? clubRosterCell(row, col('Représentant légal')) : '',
+        'statutDossier': col('Statut dossier') >= 0 ? clubRosterCell(row, col('Statut dossier')) : '',
+        'groupes': activeGroups.join(', '),
+      });
+    }
+  return result;
+}
+
+
 /// V7: consultation isolée des exports kDrive, sans écriture ni migration
 /// des associations NFC/QR de la V6.
 class V7ImportScreen extends StatefulWidget {
@@ -183,7 +225,7 @@ class _V7ImportScreenState extends State<V7ImportScreen> {
       progress('Base licenciés : décodage Excel');
       late final List<Map<String, String>> parsedPeople;
       try {
-        parsedPeople = parseMembers(XlsxDataReader.readSheet(members, 'Licenciés'));
+        parsedPeople = parseClubMembers(XlsxDataReader.readSheet(members, 'Licenciés'));
       } catch (e) {
         throw FormatException('Décodage base licenciés : $e');
       }
@@ -236,52 +278,12 @@ class _V7ImportScreenState extends State<V7ImportScreen> {
     return bytes;
   }
 
-  List<Map<String, String>> parseMembers(List<List<String>> rows) {
-      if (rows.length < 5) {
-        throw const FormatException('Onglet « Licenciés » absent ou vide.');
-      }
-      final header = List<String>.generate(rows[3].length, (i) => cell(rows[3], i));
-      int col(String name) => header.indexWhere((x) => x.toLowerCase() == name.toLowerCase());
-      final id = col('Licencie_ID');
-      final nom = col('Nom');
-      final prenom = col('Prénom');
-      if (id < 0 || nom < 0 || prenom < 0) {
-        throw const FormatException('Colonnes identifiant / nom / prénom absentes.');
-      }
-    final result = <Map<String, String>>[];
-      for (final row in rows.skip(4)) {
-        if (cell(row, id).isEmpty) continue;
-        final activeGroups = <String>[];
-        for (var i = 25; i < header.length && i < row.length; i++) {
-          final v = cell(row, i).toLowerCase();
-          if (v == '1' || v == 'true' || v == 'vrai') activeGroups.add(header[i]);
-        }
-        result.add({
-          'id': cell(row, id), 'nom': cell(row, nom), 'prenom': cell(row, prenom),
-          'categorie': col('Catégorie') >= 0 ? cell(row, col('Catégorie')) : '',
-          'session1': col('Session 1') >= 0 ? cell(row, col('Session 1')) : '',
-          'session2': col('Session 2') >= 0 ? cell(row, col('Session 2')) : '',
-          'creneau': col('Créneau') >= 0 ? cell(row, col('Créneau')) : '',
-          'niveau': col('Niveau') >= 0 ? cell(row, col('Niveau')) : '',
-          'dateNaissance': col('Date naissance') >= 0 ? cell(row, col('Date naissance')) : '',
-          'sexe': col('Sexe') >= 0 ? cell(row, col('Sexe')) : '',
-          'ville': col('Ville') >= 0 ? cell(row, col('Ville')) : '',
-          'telephone': col('Téléphone licencié') >= 0 ? cell(row, col('Téléphone licencié')) : '',
-          'telephoneTuteur': col('Téléphone responsable légal') >= 0 ? cell(row, col('Téléphone responsable légal')) : '',
-          'representantLegal': col('Représentant légal') >= 0 ? cell(row, col('Représentant légal')) : '',
-          'statutDossier': col('Statut dossier') >= 0 ? cell(row, col('Statut dossier')) : '',
-          'groupes': activeGroups.join(', '),
-        });
-      }
-    return result;
-  }
-
   Future<void> loadMembers() async {
     setState(() => busy = true);
     try {
       final excel = await pickWorkbook();
       if (excel == null) return;
-      final result = parseMembers(XlsxDataReader.readSheet(excel, 'Licenciés'));
+      final result = parseClubMembers(XlsxDataReader.readSheet(excel, 'Licenciés'));
       await rosterStore.save(result);
       if (!mounted) return;
       setState(() { people = result; status = 'Base officielle : ${result.length} licenciés importés et mémorisés'; });
