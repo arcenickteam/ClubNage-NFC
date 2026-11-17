@@ -8,6 +8,7 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'models.dart';
 import 'v7_import_screen.dart';
+import 'services/xlsx_data_reader.dart';
 import 'services/nfc_service.dart';
 import 'services/local_attendance_store.dart';
 import 'services/local_roster_store.dart';
@@ -76,6 +77,8 @@ class _ClubNageHomeState extends State<ClubNageHome> with WidgetsBindingObserver
   final LocalAttendanceStore _attendanceStore = LocalAttendanceStore();
   bool _attendanceLoaded = false;
   bool _syncingKdrive = false;
+  bool _rosterSyncing = false;
+  DateTime? _lastGlobalSync;
   bool _closingSession = false;
   String _kdriveSyncMessage = 'Présences enregistrées localement.';
   String? _attendanceError;
@@ -319,8 +322,50 @@ class _ClubNageHomeState extends State<ClubNageHome> with WidgetsBindingObserver
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _sessionTimer = Timer.periodic(const Duration(minutes: 1), (_) => _reconcileSessions());
-    _restoreRosterOnStart();
-    _restoreAttendance();
+    _initializeAndSync();
+  }
+
+  Future<void> _initializeAndSync() async {
+    // Restaurer les deux caches avant tout échange réseau : aucun pointage
+    // ne doit être remplacé par un chargement local tardif.
+    await Future.wait([_restoreRosterOnStart(), _restoreAttendance()]);
+    if (mounted) await _syncAllKdrive();
+  }
+
+  Future<void> _syncAllKdrive() async {
+    if (_syncingKdrive || _rosterSyncing || !_attendanceLoaded ||
+        _attendanceError != null) return;
+    setState(() {
+      _rosterSyncing = true;
+      _kdriveSyncMessage = 'Synchronisation globale : base licenciés…';
+    });
+    try {
+      final drive = InfomaniakKdriveService();
+      if (!await drive.restoreSavedApiToken()) {
+        if (mounted) setState(() => _kdriveSyncMessage =
+            'Connexion kDrive à configurer dans Importer les licenciés. '
+            'Les données locales restent disponibles.');
+        return;
+      }
+      // Télécharger et décoder les deux fichiers AVANT toute modification locale.
+      final base = await drive.downloadWorkbook(InfomaniakKdriveService.membersName);
+      final roster = parseClubMembers(XlsxDataReader.readSheet(base, 'Licenciés'));
+      if (roster.isEmpty) throw StateError('Base licenciés vide : import refusé.');
+      final planning = await drive.downloadWorkbook(InfomaniakKdriveService.scheduleName);
+      XlsxDataReader.readSheet(planning, 'Planning référentiel');
+      await LocalRosterStore().save(roster);
+      if (!mounted) return;
+      await _restoreRoster();
+    } catch (e) {
+      if (mounted) setState(() => _kdriveSyncMessage =
+          'Base licenciés : échec ($e). Données locales conservées. '
+          'Tentative de synchronisation des pointages et badges…');
+    } finally {
+      if (mounted) setState(() => _rosterSyncing = false);
+    }
+    if (!mounted) return;
+    await _syncAttendanceToKdrive();
+    if (mounted) setState(() => _lastGlobalSync = DateTime.now());
   }
 
   Future<void> _restoreRosterOnStart() async {
@@ -923,14 +968,9 @@ class _ClubNageHomeState extends State<ClubNageHome> with WidgetsBindingObserver
         ),
         actions: [
           IconButton(
-            tooltip: 'Importer depuis kDrive',
-            icon: const Icon(Icons.cloud_download_outlined),
-            onPressed: () async {
-              await Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const V7ImportScreen()),
-              );
-              if (mounted) await _restoreRoster();
-            },
+            tooltip: 'Tout synchroniser',
+            icon: const Icon(Icons.cloud_sync_outlined),
+            onPressed: _syncingKdrive || _rosterSyncing ? null : _syncAllKdrive,
           ),
         ],
       ),
@@ -3169,7 +3209,7 @@ class _ClubNageHomeState extends State<ClubNageHome> with WidgetsBindingObserver
           if (mounted) await _restoreRoster();
         },
         icon:const Icon(Icons.cloud_download_outlined),
-        label:const Text('IMPORTER LES LICENCIÉS'),
+        label:const Text('CONFIGURER KDRIVE / IMPORT MANUEL'),
       ),
     ],
   );
@@ -3183,11 +3223,12 @@ class _ClubNageHomeState extends State<ClubNageHome> with WidgetsBindingObserver
         subtitle: Text('Échange des séances, pointages et badges avec kDrive.'),
       ),
       Text(_kdriveSyncMessage),
+      if (_lastGlobalSync != null) Text('Dernière tentative globale : ${_lastGlobalSync!.toLocal()}'),
       const SizedBox(height: 8),
       FilledButton.icon(
-        onPressed: _syncingKdrive ? null : _syncAttendanceToKdrive,
+        onPressed: _syncingKdrive || _rosterSyncing ? null : _syncAllKdrive,
         icon: Icon(_syncingKdrive ? Icons.hourglass_top : Icons.cloud_upload_outlined),
-        label: Text(_syncingKdrive ? 'Synchronisation…' : 'SYNCHRONISER BADGES, SÉANCES ET PRÉSENCES'),
+        label: Text(_syncingKdrive || _rosterSyncing ? 'Synchronisation…' : 'TOUT SYNCHRONISER'),
       ),
     ]),
   ));
